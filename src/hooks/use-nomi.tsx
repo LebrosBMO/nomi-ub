@@ -18,12 +18,14 @@ import {
   type PendingFollowup,
 } from '@/utils/followups';
 import { loadFollowups, saveFollowups } from '@/utils/followups-storage';
+import { configureEvents } from '@/utils/events';
+import { needsTerms } from '@/utils/legal';
 import { chatExpired, MESSAGE_CAP, restoreMessages, storedMessage, type Message } from '@/utils/messages';
 import { placeById } from '@/utils/places';
 import { addReport, emptyReports, type ReportDraft, type ReportStore } from '@/utils/reports';
 import { loadReports, saveReports } from '@/utils/reports-storage';
 import { emptyState, type LocalState } from '@/utils/storage';
-import { deleteDeviceData, loadState, saveState } from '@/utils/storage-device';
+import { deleteDeviceData, installKeys, loadState, saveState } from '@/utils/storage-device';
 import { addUsage, emptyUsage, todayUsage, type DailyUsage, type ServerDaily, type TokenUsage } from '@/utils/usage';
 import { loadUsage, saveUsage } from '@/utils/usage-storage';
 
@@ -141,6 +143,12 @@ export function NomiProvider({ children }: { children: ReactNode }) {
     writing = writing.catch(() => {}).then(() => (messages.length ? AsyncStorage.setItem(CHAT_KEY, raw) : AsyncStorage.removeItem(CHAT_KEY)));
     writing.catch(() => setNotice('Яриаг хадгалж чадсангүй.'));
   }, [messages, ready]);
+
+  // The anonymous counters the place card sends (src/utils/events.ts) start only once the terms have been accepted, since the
+  // Privacy Policy is where they are stated, and stop again after "delete my data".
+  useEffect(() => {
+    configureEvents(ready && !needsTerms(settings) ? { keys: installKeys } : null);
+  }, [ready, settings]);
 
   function recordActivity(entry: ActivityEntry) {
     activityRef.current = addActivity(activityRef.current, entry);

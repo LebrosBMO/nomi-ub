@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 
 import { Colors } from '@/constants/theme';
 import { useNomi } from '@/hooks/use-nomi';
 import { mapsLink, safeUrl, verificationLabel } from '@/utils/core';
+import { recordPlaceEvent } from '@/utils/events';
 import { COMES_TO_YOU, DISTANCE_UNKNOWN, formatDistance, MOBILE_SERVICE, travelLine } from '@/utils/location';
 import { NOMI_WEB_URL } from '@/utils/hosted';
 import { placeById } from '@/utils/places';
@@ -39,6 +40,10 @@ export function PlaceCard({ id, index, animate, distance, oncall }: Props) {
   const { setNotice, recordActivity, recordCall, reports } = useNomi();
   const entering = useMemo(() => FadeInDown.duration(260).delay(160 + index * 70).easing(EASE_OUT), [index]);
   const place = placeById(id);
+  // The anonymous count of how often this business was shown (src/utils/events.ts): once per card, nothing waited for.
+  useEffect(() => {
+    if (place) recordPlaceEvent(id, 'view');
+  }, [id, place]);
   if (!place) return null;
   const map = mapsLink(place);
   const phones = place.phones.slice(0, MAX_PHONES);
@@ -57,6 +62,7 @@ export function PlaceCard({ id, index, animate, distance, oncall }: Props) {
     try {
       await Linking.openURL(target);
       recordActivity({ kind, placeId: id });
+      recordPlaceEvent(id, kind);
       // The follow-up question (Section 14) is queued here and asked once the app comes back from the call.
       if (kind === 'call') recordCall(id);
     } catch {
@@ -70,7 +76,10 @@ export function PlaceCard({ id, index, animate, distance, oncall }: Props) {
     if (!place) return;
     try {
       const result = await Share.share({ message: shareText(place, NOMI_WEB_URL || undefined) });
-      if (result.action === Share.sharedAction) recordActivity({ kind: 'share', placeId: id });
+      if (result.action === Share.sharedAction) {
+        recordActivity({ kind: 'share', placeId: id });
+        recordPlaceEvent(id, 'share');
+      }
     } catch {
       setNotice('Хуваалцаж чадсангүй.');
     }

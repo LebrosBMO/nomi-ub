@@ -5,7 +5,7 @@ import { withConsent, type LocalState } from './storage.ts';
  * the chat never asks. A new TERMS_VERSION shows the screen again. Drafts for the pilot: a Mongolian lawyer reviews them before
  * the public launch, and a contact address is added then.
  */
-export const TERMS_VERSION = '2026-10-07';
+export const TERMS_VERSION = '2026-10-09';
 
 export type LegalSection = { heading: string; body: string };
 export type LegalDoc = { title: string; sections: LegalSection[] };
@@ -70,6 +70,10 @@ export const PRIVACY: LegalDoc = {
     {
       heading: 'Утсанд үлддэг өгөгдөл',
       body: 'Яриа, ажил, санамж, сарын төлбөр, зардал, сануулга, үйлдлийн түүх, “Мэдээлэл буруу” мэдэгдэл, хэрэглээний тоо зөвхөн энэ утсанд хадгалагдана. Nomi эдгээрийг хаашаа ч илгээхгүй.',
+    },
+    {
+      heading: 'Газруудын нэргүй тоололт',
+      body: 'Аль газрыг хэр олон хүн харсан, хэр олон хүн залгасныг Nomi нэргүйгээр тоолж, тухайн бизнест нь хэлж өгдөг; та юу бичсэн, хаана байгаа нь хэзээ ч орохгүй.',
     },
     {
       heading: 'Байршил',
