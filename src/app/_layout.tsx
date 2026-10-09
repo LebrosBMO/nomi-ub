@@ -33,6 +33,10 @@ export default function RootLayout() {
           <Stack.Screen name="categories" options={{ title: 'Бүх ангилал', ...sheet }} />
           <Stack.Screen name="terms" options={{ title: 'Үйлчилгээний нөхцөл', ...sheet }} />
           <Stack.Screen name="privacy" options={{ title: 'Нууцлалын бодлого', ...sheet }} />
+          {/* The business-owner side: plain web pages with no store install and no account. */}
+          <Stack.Screen name="business/index" options={{ title: 'Nomi дээрх таны бизнес' }} />
+          <Stack.Screen name="business/report" options={{ title: 'Сарын тайлан' }} />
+          <Stack.Screen name="admin" options={{ title: 'Nomi админ' }} />
         </Stack>
         <FirstScreen />
       </StoresProvider>
@@ -40,10 +44,15 @@ export default function RootLayout() {
   );
 }
 
-/** The terms screen over everything until accepted. Not over /terms and /privacy, which are also the public pages on the web. */
+/**
+ * The terms screen over everything until accepted. Not over the public web pages: /terms and /privacy, and the business-owner
+ * side (/business, /business/report, /admin), which is for owners rather than for people using the app.
+ */
+const PUBLIC_PAGES = (path: string) => path === '/terms' || path === '/privacy' || path === '/admin' || path.startsWith('/business');
+
 function FirstScreen() {
   const { ready, settings } = useNomi();
   const path = usePathname();
-  if (!ready || !needsTerms(settings) || path === '/terms' || path === '/privacy') return null;
+  if (!ready || !needsTerms(settings) || PUBLIC_PAGES(path)) return null;
   return <TermsGate />;
 }
