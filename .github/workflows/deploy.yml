@@ -1,0 +1,43 @@
+# Deploys the web app to EAS Hosting from GitHub, so a release needs no laptop: press "Run workflow".
+# It never runs on its own — only when you start it — so nothing ships by surprise.
+#
+# One-time setup: GitHub → Settings → Secrets and variables → Actions → New repository secret
+#   EXPO_TOKEN = a personal access token from expo.dev → Account settings → Access tokens
+# Everything else (the Supabase keys, the admin token) stays on expo.dev and is read at deploy time.
+name: Deploy to EAS Hosting
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        required: true
+        default: business-portal
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The same checks that must pass before anything reaches a business owner.
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npx expo lint
+
+      - run: npx expo export --platform web
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npx eas-cli deploy --prod --environment production --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

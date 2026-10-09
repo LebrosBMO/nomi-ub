@@ -45,7 +45,21 @@ never in the code, never in git, never in a chat.
 - [ ] Check `NOMI_SIGNING_SECRET` is already there (it should be — the app's install keys use it).
       The owner report links are signed with it too.
 
-## 3. Your laptop — deploy
+## 3. Deploy
+
+Either from GitHub (no laptop needed) or from the laptop. Pick one.
+
+**From GitHub — one button.** One-time setup:
+
+- [ ] expo.dev → Account settings → **Access tokens** → create one, copy it.
+- [ ] GitHub → the repo → Settings → Secrets and variables → Actions → New repository secret:
+      `EXPO_TOKEN` = that token.
+- [ ] Actions tab → **Deploy to EAS Hosting** → **Run workflow** → branch `business-portal` → Run.
+
+It runs the typecheck, the tests and the linter first, then exports and deploys. Every release
+after this one is that same button, from anywhere, phone included.
+
+**From the laptop:**
 
 ```powershell
 cd C:\Users\Handashka\Documents\Nomi\nomi
