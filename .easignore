@@ -1,0 +1,53 @@
+# EAS uses this instead of .gitignore. Cloud builds get only the mobile client.
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# macOS
+.DS_Store
+*.pem
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# Secrets, the local AI server and developer tooling never go to the build servers.
+# The root data/ holds the exported check summary that only scripts/import-directory.py reads. The leading slash matters: a bare
+# "data/" would also exclude src/data/, and the build then fails to resolve the catalog the app bundles (@/data/directory.json).
+.env
+.env.*
+server/
+scripts/
+/data/
+.claude/
+.vscode/
+credentials.json
+credentials/
+*.keystore

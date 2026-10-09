@@ -1,0 +1,55 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {addReport,emptyReports,exportFileName,NOTE_LIMIT,REPORT_CAP,REPORT_REASONS,reportedPlaces,restoreReports,serializeReports,type Report} from './reports.ts';
+const now=new Date('2026-09-18T06:02:00Z');
+const later=(hours:number)=>new Date(now.getTime()+hours*3600000);
+const draft={placeId:'pharmacy-1',reason:'closed' as const,note:'',appVersion:'1.0.0'};
+test('AC 6.3: the same place and reason within 24 hours is not duplicated',()=>{
+ const first=addReport(emptyReports(),draft,now);
+ assert.ok(first.report);assert.equal(first.store.items.length,1);
+ const again=addReport(first.store,{...draft,note:'өөр тэмдэглэл'},later(23));
+ assert.equal(again.report,null);assert.equal(again.store,first.store);
+ assert.equal(addReport(first.store,{...draft,reason:'wrong_phone'},later(1)).store.items.length,2);
+ assert.equal(addReport(first.store,{...draft,placeId:'pharmacy-2'},later(1)).store.items.length,2);
+ assert.equal(addReport(first.store,draft,later(25)).store.items.length,2);
+ const followup=addReport(first.store,{kind:'followup',placeId:'pharmacy-1',outcome:'closed',appVersion:'1.0.0'},later(1));
+ assert.equal(followup.store.items.length,2);assert.equal(followup.report?.reason,null);
+ assert.equal(addReport(followup.store,{kind:'followup',placeId:'pharmacy-1',outcome:'closed',appVersion:'1.0.0'},later(2)).report,null);
+ assert.equal(addReport(followup.store,{kind:'followup',placeId:'pharmacy-1',outcome:'helped',appVersion:'1.0.0'},later(2)).store.items.length,3);
+});
+test('AC 6.2: the export holds only the listed fields, and reads back as a valid store',()=>{
+ const listed=['id','kind','placeId','reason','note','createdAt','appVersion'];
+ let s=addReport(emptyReports(),{...draft,note:'  хаалттай байсан  '},now).store;
+ s=addReport(s,{kind:'followup',placeId:'tire-7',outcome:'wrong_phone',appVersion:'1.0.0'},later(1)).store;
+ const leaked={...s.items[0],location:{latitude:47.9,longitude:106.9},text:'яриа',memories:['x']} as Report;
+ const out=JSON.parse(serializeReports({version:1,items:[leaked,s.items[1]]}));
+ assert.deepEqual(Object.keys(out),['version','items']);assert.equal(out.version,1);
+ assert.deepEqual(Object.keys(out.items[0]),listed);
+ assert.deepEqual(Object.keys(out.items[1]),['id','kind','placeId','reason','outcome','note','createdAt','appVersion']);
+ assert.equal(out.items[0].note,'хаалттай байсан');assert.equal(out.items[0].reason,'closed');
+ assert.equal(out.items[1].kind,'followup');assert.equal(out.items[1].outcome,'wrong_phone');assert.equal(out.items[1].placeId,'tire-7');
+ assert.deepEqual(restoreReports(out),s);
+ assert.equal(exportFileName(now),'nomi-reports-2026-09-18.json');
+ assert.equal(exportFileName(new Date('2026-09-18T16:30:00Z')),'nomi-reports-2026-09-19.json');
+});
+test('Cap 200 keeps the latest; notes are cut at 200 characters',()=>{
+ assert.equal(REPORT_CAP,200);assert.equal(NOTE_LIMIT,200);
+ let s=emptyReports();
+ for(let i=0;i<230;i++)s=addReport(s,{...draft,placeId:'p'+i},later(i/60)).store;
+ assert.equal(s.items.length,200);assert.equal(s.items[0].placeId,'p30');assert.equal(s.items[199].placeId,'p229');
+ const long=addReport(emptyReports(),{...draft,note:'а'.repeat(300)},now).report!;
+ assert.equal(long.note.length,200);
+ assert.deepEqual(REPORT_REASONS.map(([,label])=>label),['Хаагдсан','Утас буруу','Хаяг буруу','Цаг буруу','Өөр']);
+});
+test('Restore drops malformed items; reported places are the kind "report" ids plus the closed and wrong-phone follow-up answers',()=>{
+ const good:Report={id:'1',kind:'report',placeId:'p',reason:'other',note:'',createdAt:now.toISOString(),appVersion:'1.0.0'};
+ const bad=[null,{...good,kind:'complaint'},{...good,reason:'late'},{...good,outcome:'maybe'},{...good,note:'x'.repeat(201)},{...good,createdAt:'never'},{...good,placeId:''}];
+ assert.deepEqual(restoreReports({version:1,items:[good,...bad]}).items,[good]);
+ assert.deepEqual(restoreReports({version:1,items:[{...good,extra:1}]}).items,[good]);
+ assert.deepEqual(restoreReports(undefined),emptyReports());
+ assert.deepEqual(restoreReports({version:1}),emptyReports());
+ const s=restoreReports({version:1,items:[good,{...good,id:'2',kind:'followup',placeId:'q',reason:null,outcome:'helped'}]});
+ assert.deepEqual([...reportedPlaces(s)],['p']);
+ const closed=restoreReports({version:1,items:[...s.items,{...good,id:'3',kind:'followup',placeId:'r',reason:null,outcome:'closed'},{...good,id:'4',kind:'followup',placeId:'t',reason:null,outcome:'wrong_phone'}]});
+ assert.deepEqual([...reportedPlaces(closed)],['p','r','t']);
+});

@@ -1,0 +1,216 @@
+{
+  "version": 2,
+  "exportedAt": "2026-09-17T12:00:00.000Z",
+  "records": {
+    "TIRE-0002": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0004": {
+      "status": "Шалгаагүй",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0008": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0016": {
+      "status": "Шалгаагүй",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0018": {
+      "status": "Шалгаагүй",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0019": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0021": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0024": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0025": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0026": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0028": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0029": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0031": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0035": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0037": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0038": {
+      "status": "Хаагдсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0041": {
+      "status": "Шалгаагүй",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0044": {
+      "status": "Буруу дугаар",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0045": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0046": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0047": {
+      "status": "Дахин лавлах",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0051": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0052": {
+      "status": "Хаагдсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0058": {
+      "status": "Хаагдсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0063": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0070": {
+      "status": "Утсаа аваагүй",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0071": {
+      "status": "Хаагдсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0073": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0078": {
+      "status": "Хаагдсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0082": {
+      "status": "Утсаа аваагүй",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0088": {
+      "status": "Шалгаагүй",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0091": {
+      "status": "Утсаа аваагүй",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0097": {
+      "status": "Хаагдсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0100": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0102": {
+      "status": "Хаагдсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0112": {
+      "status": "Хаагдсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0115": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0145": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0150": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0157": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0166": {
+      "status": "Баталгаажсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    },
+    "TIRE-0187": {
+      "status": "Хаагдсан",
+      "checkedAt": "2026-09-17T10:00:00.000Z",
+      "coordinateStatus": "Шалгаагүй"
+    }
+  }
+}
