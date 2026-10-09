@@ -1,5 +1,7 @@
 # Nomi
 
+`LebrosBMO/nomi-ub` — not to be confused with `LebrosBMO/Nomi`, which is a different product.
+
 Mongolian chat assistant for Android, iOS and web. Expo SDK 57 with Expo Router, linked to EAS project `5afdfb0a-1060-4fde-beb8-50bb4a1c9b7a` (owner `tulgaluckystrikes-team`).
 
 This app replaces the single-file pilot in `../nomi-mobile`. The field tools (place checks, location invites, `public/*.html`) and the evaluation data in `../nomi-mobile/eval` stay there.

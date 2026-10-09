@@ -54,7 +54,7 @@ Either from GitHub (no laptop needed) or from the laptop. Pick one.
 - [ ] expo.dev → Account settings → **Access tokens** → create one, copy it.
 - [ ] GitHub → the repo → Settings → Secrets and variables → Actions → New repository secret:
       `EXPO_TOKEN` = that token.
-- [ ] Actions tab → **Deploy to EAS Hosting** → **Run workflow** → branch `business-portal` → Run.
+- [ ] Actions tab → **Deploy to EAS Hosting** → **Run workflow** → branch `main` → Run.
 
 It runs the typecheck, the tests and the linter first, then exports and deploys. Every release
 after this one is that same button, from anywhere, phone included.
@@ -63,7 +63,7 @@ after this one is that same button, from anywhere, phone included.
 
 ```powershell
 cd C:\Users\Handashka\Documents\Nomi\nomi
-git pull https://github.com/LebrosBMO/Nomi.git business-portal
+git pull https://github.com/LebrosBMO/nomi-ub.git main
 npm install
 npx expo export --platform web
 npx eas-cli deploy --prod --environment production
