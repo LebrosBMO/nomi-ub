@@ -17,17 +17,19 @@ export function configFromEnv(env:Record<string,string|undefined>):AssistantConf
 }
 
 const MAX_BODY=12000,PER_MINUTE=10,REGISTRATIONS_PER_HOUR=5;
-const json=(status:number,body:unknown,headers:Record<string,string>={})=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
+export const json=(status:number,body:unknown,headers:Record<string,string>={})=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
 /** Constant-time comparison without Node's Buffer, which the Workers runtime lacks. */
-function sameToken(supplied:string,expected:string){const a=new TextEncoder().encode(supplied),b=new TextEncoder().encode(expected);if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a[i]^b[i];return d===0;}
+export function sameToken(supplied:string,expected:string){const a=new TextEncoder().encode(supplied),b=new TextEncoder().encode(expected);if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a[i]^b[i];return d===0;}
 
 /**
  * Install keys: what a phone that was not paired by hand gets from POST /register, without any sign-up. "i1.<random id>.<HMAC>"
  * signed with NOMI_SIGNING_SECRET, so the server checks it without storing anything and can refuse one install
  * (NOMI_BLOCKED_INSTALLS) without touching the rest. Web Crypto, which both Node and the Workers runtime have.
  */
-const base64url=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-async function signature(secret:string,id:string){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return base64url(new Uint8Array(await crypto.subtle.sign('HMAC',k,new TextEncoder().encode('i1.'+id))));}
+export const base64url=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+/** HMAC-SHA256 as base64url: the install keys here, the report links in portal.ts. */
+export async function hmacBase64url(secret:string,message:string){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return base64url(new Uint8Array(await crypto.subtle.sign('HMAC',k,new TextEncoder().encode(message))));}
+const signature=(secret:string,id:string)=>hmacBase64url(secret,'i1.'+id);
 export async function issueInstallKey(secret:string){const id=base64url(crypto.getRandomValues(new Uint8Array(16)));return `i1.${id}.${await signature(secret,id)}`;}
 /** The install id inside a valid key, or null. */
 export async function installIdOf(key:string,secret:string){const m=/^i1\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/.exec(key);if(!m||secret.length<32)return null;return sameToken(m[2],await signature(secret,m[1]))?m[1]:null;}
@@ -35,7 +37,7 @@ export async function installIdOf(key:string,secret:string){const m=/^i1\.([A-Za
 /** The project label of an EAS Hosting address: "nomi-ub" for nomi-ub.expo.app and for a deployment such as nomi-ub--ckn34llwqb.expo.app. */
 const projectOf=(host:string)=>host.endsWith('.expo.app')?host.split('.')[0].split('--')[0]:null;
 /** EAS Hosting replaces Origin with an address of the deployment itself (the production alias and the deployment address can differ), so a browser's own origin never reaches this check there; browsers are held back by the CORS reply instead. */
-function sameSite(origin:string,request:Request){let o:string;try{o=new URL(origin).host;}catch{return false;}const hosts=[request.headers.get('host'),request.headers.get('x-forwarded-host'),new URL(request.url).host].filter((h):h is string=>Boolean(h));return hosts.some(h=>h===o||(projectOf(h)!==null&&projectOf(h)===projectOf(o)));}
+export function sameSite(origin:string,request:Request){let o:string;try{o=new URL(origin).host;}catch{return false;}const hosts=[request.headers.get('host'),request.headers.get('x-forwarded-host'),new URL(request.url).host].filter((h):h is string=>Boolean(h));return hosts.some(h=>h===o||(projectOf(h)!==null&&projectOf(h)===projectOf(o)));}
 
 /** The caller's address on EAS Hosting, which forwards it in X-Real-IP and X-Forwarded-For. */
 export function clientAddress(request:Request){return request.headers.get('x-real-ip')||request.headers.get('x-forwarded-for')?.split(',')[0].trim()||request.headers.get('cf-connecting-ip')||'unknown';}
