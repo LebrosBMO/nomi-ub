@@ -1,94 +1,124 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { memoryStore, storeFromEnv, upstashStore } from './store.ts';
+import type { Claim } from '../utils/business.ts';
+import { memoryStore, storeFromEnv, supabaseStore } from './store.ts';
 
-test('The memory store counts per field, reads JSON back and keeps the claim list newest first', async () => {
-  const store = memoryStore();
-  assert.deepEqual(await store.hgetall('c:p1:2026-10'), {});
-  assert.equal(await store.hincrby('c:p1:2026-10', 'view', 1), 1);
-  assert.equal(await store.hincrby('c:p1:2026-10', 'view', 1), 2);
-  await store.hincrby('c:p1:2026-10', 'call', 1);
-  assert.deepEqual(await store.hgetall('c:p1:2026-10'), { view: '2', call: '1' });
-  // Another month and another business are other keys.
-  assert.deepEqual(await store.hgetall('c:p1:2026-09'), {});
-  assert.deepEqual(await store.hgetall('c:p2:2026-10'), {});
-
-  await store.set('claim:a', { id: 'a', status: 'pending' });
-  assert.deepEqual(await store.get('claim:a'), { id: 'a', status: 'pending' });
-  assert.equal(await store.get('claim:missing'), null);
-  // A copy goes in, so a later change to the object the caller kept never reaches the store.
-  const draft = { id: 'b', status: 'pending' };
-  await store.set('claim:b', draft);
-  draft.status = 'approved';
-  assert.deepEqual(await store.get('claim:b'), { id: 'b', status: 'pending' });
-
-  for (const id of ['a', 'b', 'c']) await store.push('claims:claim', id);
-  assert.deepEqual(await store.list('claims:claim', 10), ['c', 'b', 'a']);
-  assert.deepEqual(await store.list('claims:claim', 2), ['c', 'b']);
-  assert.deepEqual(await store.list('claims:partner', 10), []);
+const claim = (id: string, extra: Partial<Claim> = {}): Claim => ({
+  id,
+  kind: 'claim',
+  status: 'pending',
+  placeId: 'apteka:2086',
+  businessName: 'Монос 12 эмийн сан',
+  category: null,
+  phones: ['99112233'],
+  hours: 'Да-Ба 09:00-19:00',
+  addressNote: '3-р хороолол',
+  serviceAreas: ['БЗД'],
+  ownerName: 'Б. Ганбат',
+  contactPhone: '88112233',
+  isOwner: true,
+  note: '',
+  createdAt: '2026-10-09T06:00:00.000Z',
+  ...extra,
 });
 
-test('A rate-limit step counts inside its own window, and a value with a lifetime goes on its own', async (t) => {
+test('The memory store counts per business, month and kind, and keeps each month apart', async () => {
+  const store = memoryStore();
+  assert.deepEqual(await store.counts('p1', '2026-10'), {});
+  await store.addEvent('p1', '2026-10', 'view');
+  await store.addEvent('p1', '2026-10', 'view');
+  await store.addEvent('p1', '2026-10', 'call');
+  assert.deepEqual(await store.counts('p1', '2026-10'), { view: 2, call: 1 });
+  // Another month and another business are other rows.
+  assert.deepEqual(await store.counts('p1', '2026-09'), {});
+  assert.deepEqual(await store.counts('p2', '2026-10'), {});
+});
+
+test('Claims come back as they were stored, newest first, filtered by kind and status', async () => {
+  const store = memoryStore();
+  assert.equal(await store.getClaim('cl_1'), null);
+  await store.saveClaim(claim('cl_1', { createdAt: '2026-10-01T00:00:00.000Z' }));
+  await store.saveClaim(claim('cl_2', { createdAt: '2026-10-02T00:00:00.000Z' }));
+  await store.saveClaim(claim('pt_1', { kind: 'partner', createdAt: '2026-10-03T00:00:00.000Z' }));
+  assert.deepEqual(await store.getClaim('cl_1'), claim('cl_1', { createdAt: '2026-10-01T00:00:00.000Z' }));
+  assert.deepEqual((await store.listClaims({ limit: 10 })).map((c) => c.id), ['pt_1', 'cl_2', 'cl_1']);
+  assert.deepEqual((await store.listClaims({ kind: 'claim', limit: 10 })).map((c) => c.id), ['cl_2', 'cl_1']);
+  assert.deepEqual((await store.listClaims({ limit: 2 })).map((c) => c.id), ['pt_1', 'cl_2']);
+  // Marking one writes it back under the same id; the status filter then finds it.
+  await store.saveClaim({ ...claim('cl_1', { createdAt: '2026-10-01T00:00:00.000Z' }), status: 'approved' });
+  assert.deepEqual((await store.listClaims({ status: 'approved', limit: 10 })).map((c) => c.id), ['cl_1']);
+  assert.equal((await store.listClaims({ limit: 10 })).length, 3);
+  // A copy goes in, so a later change to the object the caller kept never reaches the store.
+  const draft = claim('cl_3');
+  await store.saveClaim(draft);
+  draft.status = 'rejected';
+  assert.equal((await store.getClaim('cl_3'))?.status, 'pending');
+});
+
+test('A rate-limit step counts inside its own window, and the window ends on its own', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: 0 });
   const store = memoryStore();
-  assert.equal(await store.bump('rl:ev:abc:0', 120), 1);
-  assert.equal(await store.bump('rl:ev:abc:0', 120), 2);
-  // Another install, and the next minute, each start at one.
-  assert.equal(await store.bump('rl:ev:other:0', 120), 1);
-  assert.equal(await store.bump('rl:ev:abc:1', 120), 1);
-  await store.set('short', { a: 1 }, 60);
-  t.mock.timers.tick(59_000);
-  assert.deepEqual(await store.get('short'), { a: 1 });
+  assert.equal(await store.bump('rl:ev:abc', 120), 1);
+  assert.equal(await store.bump('rl:ev:abc', 120), 2);
+  // Another caller has their own allowance.
+  assert.equal(await store.bump('rl:ev:other', 120), 1);
+  t.mock.timers.tick(119_000);
+  assert.equal(await store.bump('rl:ev:abc', 120), 3);
   t.mock.timers.tick(2_000);
-  assert.equal(await store.get('short'), null);
-  // Past the two minutes a rate-limit key lives, the same key starts again from one.
-  t.mock.timers.tick(60_000);
-  assert.equal(await store.bump('rl:ev:abc:0', 120), 1);
-  assert.deepEqual(store.keys(), ['rl:ev:abc:0']);
+  assert.equal(await store.bump('rl:ev:abc', 120), 1);
 });
 
-test('In production without the Upstash variables there is no store at all; dev and tests get one in memory', () => {
+test('In production without the Supabase variables there is no store; dev and tests get one in memory', () => {
   assert.equal(storeFromEnv({ NODE_ENV: 'production' }), null);
   assert.ok(storeFromEnv({}));
-  assert.ok(storeFromEnv({ NODE_ENV: 'production', UPSTASH_REDIS_REST_URL: 'https://example.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'token' }));
+  assert.ok(storeFromEnv({ NODE_ENV: 'production', SUPABASE_URL: 'https://abc.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'service-key' }));
 });
 
-test('The Upstash adapter speaks the REST API: one command to the base URL, a pipeline for a rate-limit step', async () => {
-  const calls: { url: string; body: unknown }[] = [];
+test('The Supabase adapter speaks PostgREST: the two functions for counting, plain rows for the claims', async () => {
+  const calls: { url: string; method: string; body: unknown; headers: Record<string, string> }[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-    const body = JSON.parse(String(init?.body));
-    calls.push({ url: String(url), body });
-    if (Array.isArray(body[0])) return new Response(JSON.stringify([{ result: 7 }, { result: 1 }]));
-    if (body[0] === 'HGETALL') return new Response(JSON.stringify({ result: ['view', '3', 'call', '1'] }));
-    if (body[0] === 'GET') return new Response(JSON.stringify({ result: '{"id":"a"}' }));
-    return new Response(JSON.stringify({ result: 'OK' }));
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    calls.push({ url: String(url), method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : null, headers });
+    const path = String(url);
+    if (path.includes('/rpc/bump_rate_limit')) return new Response('7');
+    if (path.includes('/rpc/add_place_event')) return new Response('');
+    if (path.includes('/place_counts')) return new Response(JSON.stringify([{ kind: 'view', n: 312 }, { kind: 'call', n: 14 }]));
+    if (path.includes('/claims?select=*&id=eq.')) return new Response(JSON.stringify([{ id: 'cl_1', kind: 'claim', status: 'approved', place_id: 'apteka:2086', business_name: 'Монос 12', category: null, phones: ['99112233'], hours: '', address_note: '', service_areas: ['БЗД'], owner_name: 'Б. Ганбат', contact_phone: '88112233', is_owner: true, note: '', created_at: '2026-10-09T06:00:00+00:00' }]));
+    return new Response(JSON.stringify([]));
   }) as typeof fetch;
   try {
-    const store = upstashStore('https://example.upstash.io/', 'token');
-    assert.deepEqual(await store.hgetall('c:p1:2026-10'), { view: '3', call: '1' });
-    assert.deepEqual(await store.get('claim:a'), { id: 'a' });
-    assert.equal(await store.bump('rl:ev:abc:1', 120), 7);
-    await store.set('claim:b', { id: 'b' }, 60);
-    assert.deepEqual(
-      calls.map((c) => c.url),
-      ['https://example.upstash.io', 'https://example.upstash.io', 'https://example.upstash.io/pipeline', 'https://example.upstash.io']
-    );
-    assert.deepEqual(calls[2].body, [
-      ['INCR', 'rl:ev:abc:1'],
-      ['EXPIRE', 'rl:ev:abc:1', 120],
-    ]);
-    assert.deepEqual(calls[3].body, ['SET', 'claim:b', '{"id":"b"}', 'EX', 60]);
+    const store = supabaseStore('https://abc.supabase.co/', 'service-key');
+    await store.addEvent('apteka:2086', '2026-10', 'view');
+    assert.deepEqual(calls[0].body, { p_place_id: 'apteka:2086', p_month: '2026-10', p_kind: 'view' });
+    // The service key goes in both headers PostgREST wants, and nowhere else.
+    assert.equal(calls[0].headers.apikey, 'service-key');
+    assert.equal(calls[0].headers.Authorization, 'Bearer service-key');
+
+    assert.deepEqual(await store.counts('apteka:2086', '2026-10'), { view: 312, call: 14 });
+    assert.match(calls[1].url, /\/place_counts\?select=kind,n&place_id=eq\.apteka%3A2086&month=eq\.2026-10$/);
+
+    // Snake_case in the table, the shape the pages send in the app.
+    const stored = await store.getClaim('cl_1');
+    assert.equal(stored?.businessName, 'Монос 12');
+    assert.equal(stored?.isOwner, true);
+    assert.deepEqual(stored?.serviceAreas, ['БЗД']);
+    assert.equal(stored?.createdAt, '2026-10-09T06:00:00.000Z');
+    assert.equal(await store.bump('rl:ev:abc', 120), 7);
+    assert.deepEqual(calls.at(-1)?.body, { p_key: 'rl:ev:abc', p_window_seconds: 120 });
+
+    await store.listClaims({ kind: 'claim', status: 'approved', limit: 200 });
+    assert.match(calls.at(-1)!.url, /\/claims\?select=\*&order=created_at\.desc&limit=200&kind=eq\.claim&status=eq\.approved$/);
   } finally {
     globalThis.fetch = original;
   }
 });
 
-test('An unreachable or complaining database throws, so the routes can answer 503', async () => {
+test('A database that is unreachable or complaining throws, so the routes can answer 503', async () => {
   const original = globalThis.fetch;
-  globalThis.fetch = (async () => new Response(JSON.stringify({ error: 'WRONGTYPE' }))) as typeof fetch;
+  globalThis.fetch = (async () => new Response('{"message":"permission denied"}', { status: 401 })) as typeof fetch;
   try {
-    await assert.rejects(() => upstashStore('https://example.upstash.io', 'token').hincrby('c:p1:2026-10', 'view', 1));
+    await assert.rejects(() => supabaseStore('https://abc.supabase.co', 'service-key').addEvent('p1', '2026-10', 'view'));
   } finally {
     globalThis.fetch = original;
   }

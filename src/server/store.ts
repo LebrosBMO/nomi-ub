@@ -1,30 +1,32 @@
+import type {Claim,ClaimKind,ClaimStatus} from '../utils/business.ts';
+
 /**
- * The small key-value store the business-owner side needs (anonymous counters, pending claims, rate limits): the Upstash Redis
- * REST API over plain fetch, so it runs unchanged on the Workers runtime EAS Hosting serves. Hosted settings:
- * UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN. Tests and dev keep everything in memory instead; in production without the
- * two variables there is no store at all and the routes that need one answer 503 store_not_configured (src/server/portal.ts).
+ * Where the business-owner side keeps what has to outlive one request: the anonymous counters, the owner requests and the rate
+ * limits. Supabase (Postgres) over its REST API with plain fetch, no SDK, so it runs unchanged on the Workers runtime EAS
+ * Hosting serves. The tables and the two functions are in supabase/schema.sql.
+ *
+ * Hosted settings: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. The service key bypasses Row Level Security and never leaves the
+ * server. Tests and dev keep everything in memory instead; in production without the two variables there is no store at all and
+ * the routes that need one answer 503 store_not_configured (src/server/portal.ts).
  */
 export type Store={
- /** Adds to one field of a hash and answers its new value. The counters, c:<placeId>:<month>, are kept this way. */
- hincrby(key:string,field:string,by:number):Promise<number>;
- /** Every field of a hash as text; an unset key is an empty object. */
- hgetall(key:string):Promise<Record<string,string>>;
- /** One JSON value, or null when the key is unset or holds something unreadable. */
- get<T>(key:string):Promise<T|null>;
- /** Writes one JSON value, with an optional lifetime in seconds. */
- set(key:string,value:unknown,ttlSeconds?:number):Promise<void>;
- /** Puts a member at the head of a list: the claim ids, newest first. */
- push(key:string,member:string):Promise<void>;
- /** At most `limit` members of a list, newest first. */
- list(key:string,limit:number):Promise<string[]>;
- /** One step of a rate limit: the window's new count. The key goes on its own after `ttlSeconds`. */
- bump(key:string,ttlSeconds:number):Promise<number>;
+ /** One anonymous count: this business, this Ulaanbaatar month, this kind. Nothing about who sent it. */
+ addEvent(placeId:string,month:string,kind:string):Promise<void>;
+ /** Every kind's count for one business in one month; a month with nothing counted is an empty object. */
+ counts(placeId:string,month:string):Promise<Record<string,number>>;
+ /** Stores a new claim, or writes back one whose status the founder changed. */
+ saveClaim(claim:Claim):Promise<void>;
+ getClaim(id:string):Promise<Claim|null>;
+ /** Newest first, filtered where asked. */
+ listClaims(opts:{kind?:ClaimKind;status?:ClaimStatus;limit:number}):Promise<Claim[]>;
+ /** One step of a rate limit: the window's new count. The row goes on its own once the window passes. */
+ bump(key:string,windowSeconds:number):Promise<number>;
 };
 
 /** The hosted store when both variables are set; in memory for tests and dev; nothing in production without them. */
 export function storeFromEnv(env:Record<string,string|undefined>):Store|null{
- const url=env.UPSTASH_REDIS_REST_URL,token=env.UPSTASH_REDIS_REST_TOKEN;
- if(url&&token)return upstashStore(url,token);
+ const url=env.SUPABASE_URL,key=env.SUPABASE_SERVICE_ROLE_KEY;
+ if(url&&key)return supabaseStore(url,key);
  if(env.NODE_ENV==='production')return null;
  // The dev server loads each API route as its own module, so the one memory store lives on globalThis: without that a claim
  // stored by /api/business/claim would be invisible to /api/admin/claims. Tests call memoryStore() and stay separate.
@@ -32,60 +34,68 @@ export function storeFromEnv(env:Record<string,string|undefined>):Store|null{
  return (shared.__nomiMemoryStore__??=memoryStore());
 }
 
-/** The store used by the tests and by `npx expo start` without an Upstash database: the same behaviour, lost on restart. `keys` is for the tests, which check what a key may hold. */
-export function memoryStore():Store&{keys:()=>string[]}{
- const data=new Map<string,{value:unknown;expires:number}>();
- const live=(key:string)=>{const e=data.get(key);if(!e)return undefined;if(e.expires&&e.expires<=Date.now()){data.delete(key);return undefined;}return e;};
- const put=(key:string,value:unknown,ttlSeconds?:number)=>{const e={value,expires:ttlSeconds?Date.now()+ttlSeconds*1000:0};data.set(key,e);return e;};
- const hash=(key:string)=>(live(key)??put(key,new Map<string,number>())).value as Map<string,number>;
- const items=(key:string)=>(live(key)??put(key,[] as string[])).value as string[];
+/** The store the tests use, and `npx expo start` without a database: the same behaviour, lost on restart. */
+export function memoryStore():Store&{claims:()=>Claim[]}{
+ const counts=new Map<string,Map<string,number>>(),claims=new Map<string,Claim>(),limits=new Map<string,{n:number;expires:number}>();
+ const countKey=(placeId:string,month:string)=>placeId+'\u0000'+month;
  return {
-  async hincrby(key,field,by){const h=hash(key),next=(h.get(field)??0)+by;h.set(field,next);return next;},
-  async hgetall(key){const e=live(key);return e?Object.fromEntries([...(e.value as Map<string,number>)].map(([f,v])=>[f,String(v)])):{};},
-  async get<T>(key:string){const e=live(key);return e?(e.value as T):null;},
+  async addEvent(placeId,month,kind){
+   const key=countKey(placeId,month),row=counts.get(key)??new Map<string,number>();
+   row.set(kind,(row.get(kind)??0)+1);counts.set(key,row);
+  },
+  async counts(placeId,month){return Object.fromEntries(counts.get(countKey(placeId,month))??[]);},
   // A copy, so a later change to the caller's object never reaches the store, as it would not over the REST API.
-  async set(key,value,ttlSeconds){put(key,JSON.parse(JSON.stringify(value)),ttlSeconds);},
-  async push(key,member){items(key).unshift(member);},
-  async list(key,limit){return items(key).slice(0,Math.max(0,limit));},
-  async bump(key,ttlSeconds){const e=live(key);if(e){e.value=(e.value as number)+1;return e.value as number;}put(key,1,ttlSeconds);return 1;},
-  keys(){return [...data.keys()].filter(key=>Boolean(live(key)));},
+  async saveClaim(claim){claims.set(claim.id,JSON.parse(JSON.stringify(claim)));},
+  async getClaim(id){const claim=claims.get(id);return claim?JSON.parse(JSON.stringify(claim)):null;},
+  async listClaims({kind,status,limit}){
+   return [...claims.values()]
+    .filter(c=>(!kind||c.kind===kind)&&(!status||c.status===status))
+    .sort((a,b)=>b.createdAt.localeCompare(a.createdAt))
+    .slice(0,Math.max(0,limit))
+    .map(c=>JSON.parse(JSON.stringify(c)));
+  },
+  async bump(key,windowSeconds){
+   const now=Date.now(),row=limits.get(key);
+   if(row&&row.expires>now){row.n++;return row.n;}
+   limits.set(key,{n:1,expires:now+windowSeconds*1000});return 1;
+  },
+  claims:()=>[...claims.values()],
  };
 }
 
-/** The Upstash REST API: one command as a JSON array posted to the base URL, several through /pipeline. */
-export function upstashStore(url:string,token:string):Store{
- const base=url.replace(/\/$/,'');
- async function send(path:string,body:unknown){
-  const response=await fetch(base+path,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(5000)});
-  if(!response.ok)throw new Error('store_http_'+response.status);
-  return response.json();
+/** The claims table as the app reads it, and back. Postgres keeps snake_case; the app keeps the shape the pages send. */
+type ClaimRow={id:string;kind:string;status:string;place_id:string|null;business_name:string;category:string|null;phones:string[];hours:string;address_note:string;service_areas:string[];owner_name:string;contact_phone:string;is_owner:boolean;note:string;created_at:string};
+const toRow=(c:Claim):ClaimRow=>({id:c.id,kind:c.kind,status:c.status,place_id:c.placeId,business_name:c.businessName,category:c.category,phones:c.phones,hours:c.hours,address_note:c.addressNote,service_areas:c.serviceAreas,owner_name:c.ownerName,contact_phone:c.contactPhone,is_owner:c.isOwner,note:c.note,created_at:c.createdAt});
+const fromRow=(r:ClaimRow):Claim=>({id:r.id,kind:r.kind as ClaimKind,status:r.status as ClaimStatus,placeId:r.place_id,businessName:r.business_name??'',category:r.category,phones:r.phones??[],hours:r.hours??'',addressNote:r.address_note??'',serviceAreas:r.service_areas??[],ownerName:r.owner_name??'',contactPhone:r.contact_phone??'',isOwner:Boolean(r.is_owner),note:r.note??'',createdAt:new Date(r.created_at).toISOString()});
+
+/** Supabase's REST API (PostgREST) and the two functions in supabase/schema.sql. */
+export function supabaseStore(url:string,serviceKey:string):Store{
+ const base=url.replace(/\/$/,'')+'/rest/v1';
+ const headers={apikey:serviceKey,Authorization:`Bearer ${serviceKey}`,'Content-Type':'application/json'};
+ async function send(path:string,init:RequestInit){
+  const response=await fetch(base+path,{...init,headers:{...headers,...init.headers},signal:AbortSignal.timeout(6000)});
+  if(!response.ok)throw new Error(`store_http_${response.status}`);
+  const body=await response.text();
+  return body?JSON.parse(body):null;
  }
- async function one(...command:(string|number)[]){
-  const body=await send('',command) as {result?:unknown;error?:string};
-  if(body.error)throw new Error('store_command');
-  return body.result;
- }
- async function pipeline(...commands:(string|number)[][]){
-  const body=await send('/pipeline',commands) as {result?:unknown;error?:string}[];
-  if(!Array.isArray(body)||body.some(r=>r?.error))throw new Error('store_command');
-  return body.map(r=>r.result);
- }
- const parse=<T>(raw:unknown):T|null=>{if(typeof raw!=='string')return null;try{return JSON.parse(raw) as T;}catch{return null;}};
+ const rpc=(name:string,args:Record<string,unknown>)=>send('/rpc/'+name,{method:'POST',body:JSON.stringify(args)});
  return {
-  async hincrby(key,field,by){return Number(await one('HINCRBY',key,field,by));},
-  async hgetall(key){
-   // HGETALL comes back as a flat [field, value, field, value] array, and as null for a key that is not there.
-   const flat=await one('HGETALL',key);
-   if(!Array.isArray(flat))return {};
-   const result:Record<string,string>={};
-   for(let i=0;i+1<flat.length;i+=2)result[String(flat[i])]=String(flat[i+1]);
-   return result;
+  async addEvent(placeId,month,kind){await rpc('add_place_event',{p_place_id:placeId,p_month:month,p_kind:kind});},
+  async counts(placeId,month){
+   const rows=await send(`/place_counts?select=kind,n&place_id=eq.${encodeURIComponent(placeId)}&month=eq.${encodeURIComponent(month)}`,{method:'GET'}) as {kind:string;n:number}[]|null;
+   return Object.fromEntries((rows??[]).map(r=>[r.kind,Number(r.n)]));
   },
-  async get<T>(key:string){return parse<T>(await one('GET',key));},
-  async set(key,value,ttlSeconds){await one(...(ttlSeconds?['SET',key,JSON.stringify(value),'EX',ttlSeconds]:['SET',key,JSON.stringify(value)]) as (string|number)[]);},
-  async push(key,member){await one('LPUSH',key,member);},
-  async list(key,limit){const items=await one('LRANGE',key,0,Math.max(0,limit)-1);return Array.isArray(items)?items.map(String):[];},
-  // The window is part of the key, so the lifetime is set again on every step without ever stretching the window.
-  async bump(key,ttlSeconds){const [count]=await pipeline(['INCR',key],['EXPIRE',key,ttlSeconds]);return Number(count);},
+  // One row per id: a new claim is inserted, a marked one replaces itself.
+  async saveClaim(claim){await send('/claims',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(toRow(claim))});},
+  async getClaim(id){
+   const rows=await send(`/claims?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,{method:'GET'}) as ClaimRow[]|null;
+   return rows?.length?fromRow(rows[0]):null;
+  },
+  async listClaims({kind,status,limit}){
+   const where=[kind?`&kind=eq.${kind}`:'',status?`&status=eq.${status}`:''].join('');
+   const rows=await send(`/claims?select=*&order=created_at.desc&limit=${Math.max(1,limit)}${where}`,{method:'GET'}) as ClaimRow[]|null;
+   return (rows??[]).map(fromRow);
+  },
+  async bump(key,windowSeconds){return Number(await rpc('bump_rate_limit',{p_key:key,p_window_seconds:windowSeconds}));},
  };
 }

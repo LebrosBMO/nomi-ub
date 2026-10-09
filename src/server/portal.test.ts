@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { counterKey, monthInUB, previousMonth } from '../utils/counters.ts';
+import { monthInUB, previousMonth } from '../utils/counters.ts';
 import { issueInstallKey } from './assistant.ts';
 import { createPortal, readReportLink, signReportLink, type Catalog, type PortalConfig } from './portal.ts';
 import { memoryStore, type Store } from './store.ts';
@@ -48,19 +48,20 @@ test('A count needs the same key as the assistant, a known place and a known kin
   assert.equal((await handle('events', get('events', bearer(key)), 'a')).status, 404);
 });
 
-test("The counts land in this month's hash of that business, and no key holds the install id", async () => {
+test("The counts land in this month's row for that business, and nothing stored names the install", async () => {
   const store = memoryStore();
   const handle = createPortal(config({ store }));
   const key = await issueInstallKey(SECRET);
   const id = key.split('.')[1];
   for (const kind of ['view', 'view', 'call', 'share']) await handle('events', post('events', { placeId: 'p1', kind }, bearer(key)), 'a');
   await handle('events', post('events', { placeId: 'p2', kind: 'view' }, bearer(key)), 'a');
-  assert.deepEqual(await store.hgetall(counterKey('p1', monthInUB())), { view: '2', call: '1', share: '1' });
-  assert.deepEqual(await store.hgetall(counterKey('p2', monthInUB())), { view: '1' });
-  assert.deepEqual(await store.hgetall(counterKey('p1', previousMonth(monthInUB()))), {});
-  // The counters name the business and the month; the rate-limit key is a digest, so the install id is nowhere (privacy).
-  assert.deepEqual(store.keys().filter((k) => k.startsWith('c:')).sort(), [counterKey('p1', monthInUB()), counterKey('p2', monthInUB())]);
-  for (const stored of store.keys()) assert.ok(!stored.includes(id), stored);
+  assert.deepEqual(await store.counts('p1', monthInUB()), { view: 2, call: 1, share: 1 });
+  assert.deepEqual(await store.counts('p2', monthInUB()), { view: 1 });
+  assert.deepEqual(await store.counts('p1', previousMonth(monthInUB())), {});
+  // A count knows the business, the month and the kind. The install id is not stored anywhere, not even in the rate limit,
+  // which counts a digest of it (privacy).
+  assert.ok(!JSON.stringify(store.claims()).includes(id));
+  assert.ok(id.length > 10);
 });
 
 test('About 120 counts a minute per install; another install has its own allowance', async () => {
@@ -84,12 +85,12 @@ test('A claim is stored pending with an id and a time, and the owner checkbox, t
   assert.equal(first.status, 200);
   assert.match(first.body.id, /^cl_/);
   assert.equal(first.body.status, 'pending');
-  const stored = await store.get<{ id: string; status: string; createdAt: string; contactPhone: string; serviceAreas: string[] }>('claim:' + first.body.id);
+  const stored = await store.getClaim(first.body.id);
   assert.equal(stored?.status, 'pending');
   assert.equal(stored?.contactPhone, '88112233');
   assert.deepEqual(stored?.serviceAreas, ['БЗД']);
   assert.ok(Number.isFinite(Date.parse(stored?.createdAt ?? '')));
-  assert.deepEqual(await store.list('claims:claim', 10), [first.body.id]);
+  assert.deepEqual((await store.listClaims({ kind: 'claim', limit: 10 })).map((c) => c.id), [first.body.id]);
 
   const refused = async (body: unknown, route: 'claim' | 'partner' = 'claim') => {
     const answer = await sent(body, route);
@@ -110,7 +111,7 @@ test('A claim is stored pending with an id and a time, and the owner checkbox, t
   // A partner request is always about a listed business, and the owner checkbox is not asked for.
   assert.equal((await sent(claimBody({ phones: [], hours: '', addressNote: '', serviceAreas: [], isOwner: false }), 'partner')).status, 200);
   assert.deepEqual(await refused(claimBody({ placeId: null }), 'partner'), [400, 'unknown_place']);
-  assert.equal((await store.list('claims:partner', 10)).length, 1);
+  assert.equal((await store.listClaims({ kind: 'partner', limit: 10 })).length, 1);
 });
 
 test('Claims are capped per address, and only a claim that passed every check counts against the cap', async () => {
@@ -142,9 +143,9 @@ test('The report answers this month and last month for the business its link nam
   const store = memoryStore();
   const handle = createPortal(config({ store }));
   const month = monthInUB(),last = previousMonth(month);
-  for (let i = 0; i < 312; i++) await store.hincrby(counterKey('p1', month), 'view', 1);
-  for (let i = 0; i < 14; i++) await store.hincrby(counterKey('p1', month), 'call', 1);
-  await store.hincrby(counterKey('p1', last), 'call', 9);
+  for (let i = 0; i < 312; i++) await store.addEvent('p1', month, 'view');
+  for (let i = 0; i < 14; i++) await store.addEvent('p1', month, 'call');
+  for (let i = 0; i < 9; i++) await store.addEvent('p1', last, 'call');
   const token = await signReportLink(SECRET, 'p1', Date.now() + 86_400_000);
   const response = await handle('report', get('business/report?k=' + encodeURIComponent(token)), 'a');
   assert.equal(response.status, 200);
@@ -211,7 +212,7 @@ test('Without a store, and with one that fails, every route answers 503 instead 
     assert.equal(response.status, 503, status);
     assert.equal((await response.json()).error, 'store_not_configured', status);
   }
-  const broken = { ...memoryStore(), hincrby: async () => Promise.reject(new Error('upstash down')) } as unknown as Store;
+  const broken = { ...memoryStore(), addEvent: async () => Promise.reject(new Error('supabase down')) } as unknown as Store;
   const failing = createPortal(config({ store: broken }));
   const response = await failing('events', post('events', { placeId: 'p1', kind: 'view' }, bearer(key)), 'a');
   assert.equal(response.status, 503);

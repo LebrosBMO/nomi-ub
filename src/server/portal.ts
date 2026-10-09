@@ -1,5 +1,5 @@
-import {CLAIM_KINDS,isClaimKind,isClaimStatus,readClaim,type Claim,type ClaimKind} from '../utils/business.ts';
-import {counterKey,isEventKind,monthInUB,previousMonth,readCounts} from '../utils/counters.ts';
+import {isClaimKind,isClaimStatus,readClaim,type Claim,type ClaimKind,type ClaimStatus} from '../utils/business.ts';
+import {isEventKind,monthInUB,previousMonth,readCounts} from '../utils/counters.ts';
 import {NOMI_WEB_URL} from '../utils/hosted.ts';
 import {base64url,configFromEnv,hmacBase64url,installIdOf,json,sameSite,sameToken} from './assistant.ts';
 import {storeFromEnv,type Store} from './store.ts';
@@ -24,8 +24,6 @@ const EVENTS_PER_MINUTE=120,CLAIMS_PER_HOUR=5,MAX_BODY=8000,ADMIN_PAGE=50,ADMIN_
 /** How long a report link stays good. The founder makes a new one on /admin whenever it is needed. */
 export const REPORT_LINK_DAYS=92;
 
-const claimKey=(id:string)=>'claim:'+id;
-const listKey=(kind:ClaimKind)=>'claims:'+kind;
 const claimId=(kind:ClaimKind)=>`${kind==='partner'?'pt':'cl'}_${Date.now().toString(36)}${base64url(crypto.getRandomValues(new Uint8Array(6)))}`;
 /** A rate-limit key names nobody: the install id or the address goes in as a short digest, and the key expires with its window. */
 async function bucket(value:string){return base64url(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))).slice(0,16);}
@@ -80,7 +78,7 @@ export function createPortal(config:PortalConfig){
   if(!placeId||!catalog.has(placeId))return json(400,{error:'unknown_place'},cors);
   if(!isEventKind(payload.kind))return json(400,{error:'invalid_kind'},cors);
   if(await store.bump(`rl:ev:${await bucket(who)}:${Math.floor(Date.now()/60000)}`,120)>EVENTS_PER_MINUTE)return json(429,{error:'rate_limit'},cors);
-  await store.hincrby(counterKey(placeId,monthInUB()),payload.kind,1);
+  await store.addEvent(placeId,monthInUB(),payload.kind);
   return json(200,{ok:true},cors);
  }
 
@@ -99,8 +97,7 @@ export function createPortal(config:PortalConfig){
   // A claim about a listed business keeps the catalog's name, so /admin and the export read as a name rather than an id.
   const businessName=read.claim.businessName||(read.claim.placeId?catalog.name(read.claim.placeId)??'':'');
   const record:Claim={...read.claim,businessName,id:claimId(kind),status:'pending',createdAt:new Date().toISOString()};
-  await store.set(claimKey(record.id),record);
-  await store.push(listKey(kind),record.id);
+  await store.saveClaim(record);
   return json(200,{id:record.id,status:record.status},cors);
  }
 
@@ -110,7 +107,7 @@ export function createPortal(config:PortalConfig){
   if(!placeId)return json(404,{error:'invalid_link'},cors);
   if(!store)return json(503,{error:'store_not_configured'},cors);
   const month=monthInUB(),before=previousMonth(month);
-  const [now,last]=await Promise.all([store.hgetall(counterKey(placeId,month)),store.hgetall(counterKey(placeId,before))]);
+  const [now,last]=await Promise.all([store.counts(placeId,month),store.counts(placeId,before)]);
   return json(200,{placeId,name:catalog.name(placeId),month,previousMonth:before,counts:readCounts(now),previousCounts:readCounts(last)},cors);
  }
 
@@ -126,24 +123,18 @@ export function createPortal(config:PortalConfig){
    const payload=await readBody(request);
    const id=typeof payload?.id==='string'?payload.id:'';
    if(!id||!isClaimStatus(payload?.status))return json(400,{error:'invalid_body'},cors);
-   const record=await store.get<Claim>(claimKey(id));
+   const record=await store.getClaim(id);
    if(!record)return json(404,{error:'not_found'},cors);
    const updated:Claim={...record,status:payload!.status};
-   await store.set(claimKey(id),updated);
+   await store.saveClaim(updated);
    return json(200,{claim:updated},cors);
   }
   const params=new URL(request.url).searchParams,kind=params.get('kind'),status=params.get('status');
   if(kind&&!isClaimKind(kind))return json(400,{error:'invalid_kind'},cors);
   if(status&&!isClaimStatus(status))return json(400,{error:'invalid_status'},cors);
-  // The newest `limit` of each list are read, then the status filter applies to them: the export asks for enough to cover them all.
   const limit=Math.min(Math.max(Number(params.get('limit'))||ADMIN_PAGE,1),500);
-  const items:Claim[]=[];
-  for(const only of kind?[kind as ClaimKind]:[...CLAIM_KINDS])
-   for(const id of await store.list(listKey(only),limit)){
-    const record=await store.get<Claim>(claimKey(id));
-    if(record&&(!status||record.status===status))items.push(record);
-   }
-  items.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  // The database filters and orders them, so the export asking for approved claims gets every one, not the newest page filtered.
+  const items=await store.listClaims({...(kind?{kind:kind as ClaimKind}:{}),...(status?{status:status as ClaimStatus}:{}),limit});
   return json(200,{items},cors);
  }
 

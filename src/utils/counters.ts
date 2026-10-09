@@ -2,8 +2,8 @@ import {dayInUB} from './personal.ts';
 
 /**
  * The anonymous counters behind the monthly report a business owner sees (/business/report): how often each business was shown
- * and called. One hash per business per month, the kind as its field. Nothing else is ever stored with a count: no message text,
- * no position and no install id.
+ * and called. One row per business, month and kind (supabase/schema.sql). Nothing else is ever stored with a count: no message
+ * text, no position and no install id.
  */
 export const EVENT_KINDS=['view','open','call','map','share'] as const;
 export type EventKind=(typeof EVENT_KINDS)[number];
@@ -16,14 +16,12 @@ export const KIND_LABELS:Record<EventKind,string>={view:'Харсан',open:'Д�
 export const monthInUB=(now=new Date())=>dayInUB(now).slice(0,7);
 /** The month before it, "YYYY-MM". */
 export function previousMonth(month:string){const [year,m]=month.split('-').map(Number);return m>1?`${year}-${String(m-1).padStart(2,'0')}`:`${year-1}-12`;}
-/** The counter hash of one business in one month. */
-export const counterKey=(placeId:string,month:string)=>`c:${placeId}:${month}`;
 export const emptyCounts=():Counts=>({view:0,open:0,call:0,map:0,share:0});
 
-/** The hash as whole numbers; an unknown field is left out and anything unreadable counts as zero. */
-export function readCounts(hash:Record<string,string>):Counts{
+/** One month's row as whole numbers; a kind the store does not know is left out and anything unreadable counts as zero. */
+export function readCounts(row:Record<string,string|number>):Counts{
  const counts=emptyCounts();
- for(const kind of EVENT_KINDS){const n=Number(hash[kind]);counts[kind]=Number.isSafeInteger(n)&&n>0?n:0;}
+ for(const kind of EVENT_KINDS){const n=Number(row[kind]);counts[kind]=Number.isSafeInteger(n)&&n>0?n:0;}
  return counts;
 }
 

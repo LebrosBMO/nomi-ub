@@ -1,0 +1,20 @@
+# Supabase's free plan pauses a project after about a week with no queries, and a paused project has to be
+# restored by hand — which would leave a business owner's report link dead. One harmless query every three days
+# keeps it awake. Repository secrets: SUPABASE_URL and SUPABASE_ANON_KEY (the anon key, never the service key;
+# Row Level Security means it reads nothing). Delete this workflow on a paid plan.
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: '17 3 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the database
+        run: |
+          curl --fail --silent --show-error --output /dev/null \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/place_counts?select=place_id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"
