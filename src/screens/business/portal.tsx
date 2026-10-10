@@ -9,8 +9,10 @@ import { CATEGORY_DATA, GROUPS, type CategoryDef } from '@/data/categories';
 import { CLAIM_ERRORS, LIMITS, PARTNER, readClaim, searchBusinesses, type ClaimDraft } from '@/utils/business';
 import { CATEGORIES, categoryMode, categoryName, matchCategories, skeleton } from '@/utils/category-match';
 import { districtNames, verificationLabel, type Place } from '@/utils/core';
+import { defaultWeek, formatHours, type Week } from '@/utils/hours';
 import { placeById, places } from '@/utils/places';
 
+import { CopyToAll, HoursPicker } from './hours';
 import { apiMessage, callApi, Check, Field, Hint, INSTALL_STEPS, Label, Lede, Notice, Page, Primary, Quiet, Section, Title, useInstallPrompt } from './parts';
 import { forgetReport, rememberedReport, type RememberedReport } from './remember';
 
@@ -166,7 +168,11 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
   const [businessName, setBusinessName] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [phones, setPhones] = useState<string[]>(() => [...(place?.phones ?? []), '', '', ''].slice(0, LIMITS.phones));
-  const [hours, setHours] = useState(place && place.hoursClaim !== 'Ажиллах цагийг лавлана уу' ? place.hoursClaim : '');
+  // Hours are chosen, not typed (src/utils/hours.ts). `setting` off means the owner is not changing them, so nothing is sent
+  // and whatever the catalog holds stays as it is.
+  const [setting, setSetting] = useState(false);
+  const [week, setWeek] = useState<Week>(defaultWeek);
+  const hours = setting ? formatHours(week) : '';
   const [addressNote, setAddressNote] = useState('');
   const [areas, setAreas] = useState<string[]>(place?.serviceAreas ?? []);
   const [ownerName, setOwnerName] = useState('');
@@ -239,14 +245,17 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
           maxLength={20}
         />
       ))}
-      <Field
-        label="Ажиллах цаг"
-        placeholder="Жишээ: Да-Ба 09:00-19:00, Бя 10:00-16:00"
-        value={hours}
-        onChangeText={setHours}
-        maxLength={LIMITS.hours}
-        hint="Яг байгаа цагаа бичээрэй. Nomi утсаар шалгах хүртэл “баталгаажаагүй” гэж харуулна."
-      />
+      <View style={styles.hours}>
+        <Check label="Ажиллах цагаа зөв болгох" checked={setting} onToggle={() => setSetting(!setting)} />
+        {!setting && <Hint>{place?.hoursClaim ? `Одоо: ${place.hoursClaim}` : 'Одоогоор ажиллах цаг бүртгэгдээгүй.'}</Hint>}
+        {setting && (
+          <>
+            <CopyToAll week={week} onChange={setWeek} />
+            <HoursPicker week={week} onChange={setWeek} />
+            <Hint>Nomi утсаар шалгах хүртэл “баталгаажаагүй” гэж харуулна.</Hint>
+          </>
+        )}
+      </View>
       <Field
         label="Хаягийн тэмдэглэл"
         placeholder="Жишээ: 3-р хороолол, Их дэлгүүрийн баруун талд, 1-р давхар"
@@ -411,6 +420,7 @@ const styles = StyleSheet.create({
   districtsProminent: { backgroundColor: Colors.panel, borderRadius: 12, padding: 12 },
   districtGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
   districtCell: { width: '50%', minWidth: 130 },
+  hours: { marginTop: 16 },
   ownerCheck: { marginTop: 16 },
   offer: { fontSize: 14, color: Colors.text, marginBottom: 6 },
   bullet: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: 4 },
