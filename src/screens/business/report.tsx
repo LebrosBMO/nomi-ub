@@ -1,3 +1,4 @@
+import Head from 'expo-router/head';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -6,6 +7,7 @@ import { Colors } from '@/constants/theme';
 import { EVENT_KINDS, KIND_LABELS, summaryLine, type Counts } from '@/utils/counters';
 
 import { apiMessage, callApi, Hint, Lede, Notice, Page, Section, Title } from './parts';
+import { rememberReport } from './remember';
 
 type ReportData = { placeId: string; name: string | null; month: string; previousMonth: string; counts: Counts; previousCounts: Counts };
 
@@ -36,6 +38,8 @@ export function BusinessReport() {
       setLoading(false);
       setData(result.data);
       setProblem(result.ok ? '' : apiMessage(result.error, { invalid_link: BAD_LINK }));
+      // A link that worked is kept in this browser, so the owner's home-screen icon opens their numbers next time.
+      if (result.ok && result.data) rememberReport({ token, placeId: result.data.placeId, name: result.data.name });
     });
     return () => {
       live = false;
@@ -44,6 +48,9 @@ export function BusinessReport() {
 
   return (
     <Page>
+      <Head>
+        <title>Nomi бизнес — сарын тайлан</title>
+      </Head>
       <Title>Сарын тайлан</Title>
       {loading && <Lede>Уншиж байна…</Lede>}
       {!!problem && <Notice>{problem}</Notice>}

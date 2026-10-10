@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 
 import { Colors } from '@/constants/theme';
@@ -32,6 +32,48 @@ export const apiMessage = (error: string, codes: Record<string, string> = {}) =>
       : error === 'rate_limit'
         ? 'Хэт олон хүсэлт илгээлээ. Жаахан хүлээгээд дахин оролдоно уу.'
         : 'Илгээж чадсангүй. Дахин оролдоно уу.');
+
+/**
+ * Whether the browser will offer to put Nomi on the home screen, and whether it is already there. Chrome fires
+ * `beforeinstallprompt` and lets the page keep it for a button of its own; Safari offers nothing, so the page explains the
+ * Share menu instead. In an installed window both are quiet and the page says nothing at all.
+ */
+export function useInstallPrompt() {
+  const [prompt, setPrompt] = useState<{ prompt: () => void } | null>(null);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const standalone = () => {
+      const asApp = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true;
+      if (asApp) setInstalled(true);
+    };
+    standalone();
+    const offer = (event: Event) => {
+      // Without this the browser shows its own bar instead, which owners miss.
+      event.preventDefault();
+      setPrompt(event as unknown as { prompt: () => void });
+    };
+    const done = () => {
+      setInstalled(true);
+      setPrompt(null);
+    };
+    window.addEventListener('beforeinstallprompt', offer);
+    window.addEventListener('appinstalled', done);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', offer);
+      window.removeEventListener('appinstalled', done);
+    };
+  }, []);
+
+  return { prompt, installed, install: () => { prompt?.prompt(); setPrompt(null); } };
+}
+
+/** iPhone and Android say it differently, and an owner following the wrong one gives up. */
+export const INSTALL_STEPS =
+  Platform.OS === 'web' && typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
+    ? 'Доод талын хуваалцах товч (↑) → "Нүүр дэлгэцэнд нэмэх".'
+    : 'Хөтчийн цэс (⋮) → "Нүүр дэлгэцэнд нэмэх" эсвэл "Апп суулгах".';
 
 export function Page({ children }: { children: ReactNode }) {
   return (

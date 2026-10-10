@@ -51,6 +51,7 @@ export const NOMI_KEYS = [
   'nomi:usage:v1', // хэрэглээ
   'nomi:followups:v1', // the question after a call
   INSTALL_WEB_KEY, // холболт: the install key, on web only
+  'nomi:business:v1', // the owner's own report link, kept by the business pages on web (src/screens/business/remember.ts)
 ] as const;
 /** What "Миний өгөгдлийг устгах" says will go, in this order. */
 export const DELETED_DATA = ['яриа', 'ажил', 'санамж', 'төлбөр', 'зардал', 'сануулга', 'мэдэгдэл', 'үйлдлийн түүх', 'хэрэглээ', 'холболт'] as const;

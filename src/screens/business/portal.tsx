@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import Head from 'expo-router/head';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 import { CATEGORY_DATA, GROUPS, type CategoryDef } from '@/data/categories';
@@ -9,7 +10,8 @@ import { CATEGORIES, categoryMode, categoryName, matchCategories, skeleton } fro
 import { districtNames, verificationLabel, type Place } from '@/utils/core';
 import { placeById, places } from '@/utils/places';
 
-import { apiMessage, callApi, Check, Field, Hint, Label, Lede, Notice, Page, Primary, Quiet, Section, Title } from './parts';
+import { apiMessage, callApi, Check, Field, Hint, INSTALL_STEPS, Label, Lede, Notice, Page, Primary, Quiet, Section, Title, useInstallPrompt } from './parts';
+import { forgetReport, rememberedReport } from './remember';
 
 /** The address as the chat's card shows it, so the owner sees what the customer sees. */
 const NO_ADDRESS = 'Нарийвчилсан хаяг дутуу';
@@ -25,15 +27,43 @@ export function BusinessPortal() {
   const [selected, setSelected] = useState<Place | null>(null);
   const [adding, setAdding] = useState(false);
   const found = useMemo(() => (query.trim() ? searchBusinesses(places, query) : []), [query]);
+  // The report link this browser has already opened, so an owner with the app on their phone lands on their own numbers.
+  const [saved, setSaved] = useState(() => rememberedReport());
 
   return (
     <Page>
+      {/* The icon and the manifest for these pages are swapped in src/app/+html.tsx, before the browser reads them. */}
+      <Head>
+        <title>Nomi бизнес</title>
+      </Head>
       <Title>Nomi дээрх таны бизнес</Title>
       <Lede>
         Nomi бол Улаанбаатарын үйлчилгээний газруудыг олдог монгол чат. Хүн “ойрхон эмийн сан” эсвэл “дугуй засвар” гэж бичихэд Nomi хамгийн таарах газруудын нэр, утас,
         хаяг, цагийг харуулдаг.
       </Lede>
       <Lede>Таны газар Nomi дээр үнэгүй байна. Бүртгүүлэх, төлбөр төлөх шаардлагагүй — мэдээллээ зөв болгуулахад л хангалттай.</Lede>
+
+      {!!saved && (
+        <Section heading="Таны сарын тайлан">
+          <Lede>{saved.name ?? saved.placeId}</Lede>
+          <Hint>Хэдэн хүн таныг харсан, хэдэн хүн залгасныг харах.</Hint>
+          <Primary
+            label="Тайлангаа харах"
+            onPress={() => {
+              if (Platform.OS === 'web' && typeof window !== 'undefined') window.location.href = '/business/report?k=' + encodeURIComponent(saved.token);
+            }}
+          />
+          <Quiet
+            label="Энэ бол миний газар биш"
+            onPress={() => {
+              forgetReport();
+              setSaved(null);
+            }}
+          />
+        </Section>
+      )}
+
+      <InstallCard />
 
       <Section heading="Газраа хайх">
         <Field
@@ -80,6 +110,22 @@ export function BusinessPortal() {
         зөвлөгөө өгөхгүй.
       </Hint>
     </Page>
+  );
+}
+
+/**
+ * "Утсандаа суулгах": the page offers the browser's own install where there is one (Android, Chrome), and explains the
+ * Share menu where there is not (iPhone). In an already installed window it says nothing.
+ */
+function InstallCard() {
+  const { prompt, installed, install } = useInstallPrompt();
+  if (installed) return null;
+  return (
+    <Section heading="Утсандаа суулгах">
+      <Lede>Nomi бизнесийг утсандаа апп шиг нэмээд, нэг товшилтоор мэдээллээ засаж, сарын тайлангаа харж болно.</Lede>
+      <Hint>Апп дэлгүүрээс татах шаардлагагүй, бүртгүүлэх ч шаардлагагүй.</Hint>
+      {prompt ? <Primary label="Утсандаа суулгах" onPress={install} /> : <Hint>{INSTALL_STEPS}</Hint>}
+    </Section>
   );
 }
 
