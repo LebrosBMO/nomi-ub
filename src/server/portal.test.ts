@@ -199,6 +199,20 @@ test("/admin needs the founder's token, then lists the claims newest first, mark
   assert.equal((await handle('admin-report-link', get('admin/report-link?placeId=nope', bearer(ADMIN)), 'a')).status, 400);
 });
 
+test('Guessing the admin token is capped per address, and the right token never counts against it', async () => {
+  const handle = createPortal(config());
+  const guess = (n: number) => handle('admin-claims', get('admin/claims', bearer('wrong-token-number-' + n)), '203.0.113.9');
+  const codes: number[] = [];
+  for (let i = 0; i < 12; i++) codes.push((await guess(i)).status);
+  // Ten wrong tokens an hour, then the address is turned away without even a comparison.
+  assert.equal(codes.filter((c) => c === 401).length, 10);
+  assert.deepEqual(codes.slice(-2), [429, 429]);
+  // Another address still has its own allowance, and a right token is never counted, however often it is used.
+  assert.equal((await handle('admin-claims', get('admin/claims', bearer('wrong')), '198.51.100.9')).status, 401);
+  for (let i = 0; i < 30; i++) assert.equal((await handle('admin-claims', get('admin/claims', bearer(ADMIN)), '198.51.100.9')).status, 200);
+  assert.equal((await handle('admin-report-link', get('admin/report-link?placeId=p1', bearer(ADMIN)), '198.51.100.9')).status, 200);
+});
+
 test('Without a store, and with one that fails, every route answers 503 instead of breaking', async () => {
   const key = await issueInstallKey(SECRET);
   const none = createPortal(config({ store: null }));

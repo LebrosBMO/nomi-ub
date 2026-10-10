@@ -21,6 +21,8 @@ export function portalConfigFromEnv(env:Record<string,string|undefined>,catalog:
 
 /** About two events a second per install, enough for any amount of reading and far too little to move a count. */
 const EVENTS_PER_MINUTE=120,CLAIMS_PER_HOUR=5,MAX_BODY=8000,ADMIN_PAGE=50,ADMIN_TOKEN_MIN=16;
+/** Wrong admin tokens an address may try in an hour. The claims hold owners' names and numbers, so guessing is not left open. */
+const ADMIN_TRIES_PER_HOUR=10;
 /** How long a report link stays good. The founder makes a new one on /admin whenever it is needed. */
 export const REPORT_LINK_DAYS=92;
 
@@ -112,12 +114,23 @@ export function createPortal(config:PortalConfig){
  }
 
  const adminReady=()=>adminToken.length>=ADMIN_TOKEN_MIN;
- const admin=(request:Request)=>adminReady()&&sameToken(bearer(request),adminToken);
+ /**
+  * The founder's token, with wrong guesses counted per address. A right token is never counted, so refreshing the list all
+  * day costs nothing; a wrong one is, and ten an hour is far too few to find a random token of any length.
+  */
+ async function admin(request:Request,client:string){
+  if(adminReady()&&sameToken(bearer(request),adminToken))return 'ok' as const;
+  if(store&&await store.bump(`rl:ad:${await bucket(client)}:${Math.floor(Date.now()/3600000)}`,3600)>ADMIN_TRIES_PER_HOUR)return 'too_many' as const;
+  return 'wrong' as const;
+ }
+ const refused=(result:'wrong'|'too_many',cors:Record<string,string>)=>
+  result==='too_many'?json(429,{error:'rate_limit'},cors):json(401,{error:'admin_token_required'},cors);
 
  /** GET /api/admin/claims lists them newest first; POST marks one approved, rejected or called. */
- async function adminClaims(request:Request,cors:Record<string,string>){
+ async function adminClaims(request:Request,client:string,cors:Record<string,string>){
   if(!adminReady())return json(503,{error:'admin_not_configured'},cors);
-  if(!admin(request))return json(401,{error:'admin_token_required'},cors);
+  const allowed=await admin(request,client);
+  if(allowed!=='ok')return refused(allowed,cors);
   if(!store)return json(503,{error:'store_not_configured'},cors);
   if(request.method==='POST'){
    const payload=await readBody(request);
@@ -139,9 +152,10 @@ export function createPortal(config:PortalConfig){
  }
 
  /** GET /api/admin/report-link?placeId=: the signed link the founder sends the owner. */
- async function reportLink(request:Request,cors:Record<string,string>){
+ async function reportLink(request:Request,client:string,cors:Record<string,string>){
   if(!adminReady())return json(503,{error:'admin_not_configured'},cors);
-  if(!admin(request))return json(401,{error:'admin_token_required'},cors);
+  const allowed=await admin(request,client);
+  if(allowed!=='ok')return refused(allowed,cors);
   if(signingSecret.length<32)return json(503,{error:'links_unavailable'},cors);
   const placeId=new URL(request.url).searchParams.get('placeId')||'';
   if(!placeId||!catalog.has(placeId))return json(400,{error:'unknown_place'},cors);
@@ -165,8 +179,8 @@ export function createPortal(config:PortalConfig){
    if(route==='claim'&&request.method==='POST')return await claim('claim',request,client,cors);
    if(route==='partner'&&request.method==='POST')return await claim('partner',request,client,cors);
    if(route==='report'&&request.method==='GET')return await report(request,cors);
-   if(route==='admin-claims'&&(request.method==='GET'||request.method==='POST'))return await adminClaims(request,cors);
-   if(route==='admin-report-link'&&request.method==='GET')return await reportLink(request,cors);
+   if(route==='admin-claims'&&(request.method==='GET'||request.method==='POST'))return await adminClaims(request,client,cors);
+   if(route==='admin-report-link'&&request.method==='GET')return await reportLink(request,client,cors);
    return json(404,{error:'not_found'},cors);
   }catch{
    // A store that cannot be reached, or answers with an error, never takes a route down with it.
