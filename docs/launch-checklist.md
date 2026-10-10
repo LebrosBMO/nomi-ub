@@ -94,6 +94,16 @@ has to be restored by hand — which would leave an owner's report link dead.
   - `SUPABASE_ANON_KEY` — the **anon** key this time, not service_role (it reads nothing, RLS blocks it)
 - [ ] Actions tab → "Keep Supabase awake" → Run workflow, to check it passes.
 
+## 6. The owner app in the store (optional, after the web side is live)
+
+The same code also builds **Nomi бизнес** as a real Android app. Everything Play Console asks for is
+drafted in `docs/play-store.md`: the permanent application ids, the Mongolian listings for both apps, the
+data safety answers, permissions and the closed-testing rule.
+
+- [ ] `EXPO_PUBLIC_APP_VARIANT=business npx eas-cli init` once, and keep the project id in `EAS_PROJECT_ID_BUSINESS`.
+- [ ] `npx eas-cli build --platform android --profile production-business`
+- [ ] Upload the .aab, paste the listing from `docs/play-store.md`.
+
 ## After launch
 
 - One deploy ships the new `TERMS_VERSION`, so every existing user sees the first screen once more

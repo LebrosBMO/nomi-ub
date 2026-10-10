@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import Head from 'expo-router/head';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
@@ -11,7 +12,7 @@ import { districtNames, verificationLabel, type Place } from '@/utils/core';
 import { placeById, places } from '@/utils/places';
 
 import { apiMessage, callApi, Check, Field, Hint, INSTALL_STEPS, Label, Lede, Notice, Page, Primary, Quiet, Section, Title, useInstallPrompt } from './parts';
-import { forgetReport, rememberedReport } from './remember';
+import { forgetReport, rememberedReport, type RememberedReport } from './remember';
 
 /** The address as the chat's card shows it, so the owner sees what the customer sees. */
 const NO_ADDRESS = 'Нарийвчилсан хаяг дутуу';
@@ -27,8 +28,17 @@ export function BusinessPortal() {
   const [selected, setSelected] = useState<Place | null>(null);
   const [adding, setAdding] = useState(false);
   const found = useMemo(() => (query.trim() ? searchBusinesses(places, query) : []), [query]);
-  // The report link this browser has already opened, so an owner with the app on their phone lands on their own numbers.
-  const [saved, setSaved] = useState(() => rememberedReport());
+  // The report link this device has already opened, so an owner with the app on their phone lands on their own numbers.
+  const [saved, setSaved] = useState<RememberedReport | null>(null);
+  useEffect(() => {
+    let live = true;
+    rememberedReport().then((report) => {
+      if (live) setSaved(report);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   return (
     <Page>
@@ -47,16 +57,11 @@ export function BusinessPortal() {
         <Section heading="Таны сарын тайлан">
           <Lede>{saved.name ?? saved.placeId}</Lede>
           <Hint>Хэдэн хүн таныг харсан, хэдэн хүн залгасныг харах.</Hint>
-          <Primary
-            label="Тайлангаа харах"
-            onPress={() => {
-              if (Platform.OS === 'web' && typeof window !== 'undefined') window.location.href = '/business/report?k=' + encodeURIComponent(saved.token);
-            }}
-          />
+          <Primary label="Тайлангаа харах" onPress={() => router.navigate({ pathname: '/business/report', params: { k: saved.token } })} />
           <Quiet
             label="Энэ бол миний газар биш"
             onPress={() => {
-              forgetReport();
+              void forgetReport();
               setSaved(null);
             }}
           />
@@ -119,7 +124,7 @@ export function BusinessPortal() {
  */
 function InstallCard() {
   const { prompt, installed, install } = useInstallPrompt();
-  if (installed) return null;
+  if (installed || Platform.OS !== 'web') return null;
   return (
     <Section heading="Утсандаа суулгах">
       <Lede>Nomi бизнесийг утсандаа апп шиг нэмээд, нэг товшилтоор мэдээллээ засаж, сарын тайлангаа харж болно.</Lede>

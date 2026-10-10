@@ -1,26 +1,24 @@
-import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * The owner's own report link, kept in this browser. Once they have opened the link Nomi sent them, the icon on their home
- * screen opens their own numbers instead of the search. Only this browser ever holds it: the server stores nothing about
- * who is reading a report, and the link expires on its own.
+ * The owner's own report link, kept on this device. Once they have opened the link Nomi sent them, the owner app — and the
+ * web page on the same browser — opens their own numbers instead of the search. It never leaves the device: the server
+ * stores nothing about who reads a report, and the link expires on its own.
  */
 const KEY = 'nomi:business:v1';
 export type RememberedReport = { token: string; placeId: string; name: string | null };
 
-const storage = () => (Platform.OS === 'web' && typeof localStorage !== 'undefined' ? localStorage : null);
-
-export function rememberReport(report: RememberedReport) {
+export async function rememberReport(report: RememberedReport) {
   try {
-    storage()?.setItem(KEY, JSON.stringify(report));
+    await AsyncStorage.setItem(KEY, JSON.stringify(report));
   } catch {
-    // A browser with storage switched off simply asks for the link again next time.
+    // Storage switched off only costs the shortcut: the owner opens their link again.
   }
 }
 
-export function rememberedReport(): RememberedReport | null {
+export async function rememberedReport(): Promise<RememberedReport | null> {
   try {
-    const raw = storage()?.getItem(KEY);
+    const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return null;
     const value = JSON.parse(raw);
     return typeof value?.token === 'string' && typeof value?.placeId === 'string' ? { token: value.token, placeId: value.placeId, name: value.name ?? null } : null;
@@ -29,10 +27,10 @@ export function rememberedReport(): RememberedReport | null {
   }
 }
 
-export function forgetReport() {
+export async function forgetReport() {
   try {
-    storage()?.removeItem(KEY);
+    await AsyncStorage.removeItem(KEY);
   } catch {
-    // Nothing to do: the next read fails the same way and the page asks for the link again.
+    // The next read fails the same way and the page asks for the link again.
   }
 }

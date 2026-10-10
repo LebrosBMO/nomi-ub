@@ -39,7 +39,7 @@ export function BusinessReport() {
       setData(result.data);
       setProblem(result.ok ? '' : apiMessage(result.error, { invalid_link: BAD_LINK }));
       // A link that worked is kept in this browser, so the owner's home-screen icon opens their numbers next time.
-      if (result.ok && result.data) rememberReport({ token, placeId: result.data.placeId, name: result.data.name });
+      if (result.ok && result.data) void rememberReport({ token, placeId: result.data.placeId, name: result.data.name });
     });
     return () => {
       live = false;

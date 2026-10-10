@@ -1,9 +1,11 @@
+import { Redirect } from 'expo-router';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { Platform } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 import { useStores } from '@/hooks/use-stores';
 import { attentionCount, todayPlan } from '@/utils/helper';
+import { IS_BUSINESS_APP } from '@/utils/variant';
 
 /**
  * The two halves of Nomi (Section 20): "Асуух" is the chat, where questions are asked and places are found; "Миний" is the
@@ -12,6 +14,8 @@ import { attentionCount, todayPlan } from '@/utils/helper';
  */
 export default function TabsLayout() {
   const { personal, reminders, payments, ready } = useStores();
+  // The owner app has no chat and no personal helper: it opens on the business pages instead (app.config.ts).
+  if (IS_BUSINESS_APP) return <Redirect href="/business" />;
   const waiting = ready ? attentionCount(todayPlan(personal, reminders, payments)) : 0;
 
   return (

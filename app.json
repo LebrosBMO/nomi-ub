@@ -9,13 +9,13 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "mn.nomi.pilot",
+      "bundleIdentifier": "mn.nomi.app",
       "infoPlist": {
         "CADisableMinimumFrameDurationOnPhone": true
       }
     },
     "android": {
-      "package": "mn.nomi.pilot",
+      "package": "mn.nomi.app",
       "adaptiveIcon": {
         "backgroundColor": "#164F43",
         "foregroundImage": "./assets/images/android-icon-foreground.png"

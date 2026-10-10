@@ -18,10 +18,28 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "preview-business": {
+      "extends": "preview",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_VARIANT": "business"
+      }
+    },
+    "production-business": {
+      "extends": "production",
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_APP_VARIANT": "business"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "production-business": {}
   }
 }
