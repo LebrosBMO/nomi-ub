@@ -23,10 +23,16 @@ function findPython(): { cmd: string; args: string[] } | null {
   return null;
 }
 const python = findPython();
-const skip = python ? false : 'No Python interpreter found (python, py or python3)';
+/** The catalog's source files live outside the repository, so a clone without them (CI, a fresh machine) skips rather than fails. */
+const sources = fileURLToPath(new URL('../../Nomi_All_Prepared_Files', import.meta.url));
+const skip = !python
+  ? 'No Python interpreter found (python, py or python3)'
+  : !fs.existsSync(sources)
+    ? `The catalog sources are not in this checkout (${sources})`
+    : false;
 
 function build(summary: string, out: string) {
-  if (!python) throw new Error(skip as string);
+  if (!python || skip) throw new Error(skip as string);
   const run = spawnSync(python.cmd, [...python.args, script, '--summary', summary, '--out', out], { encoding: 'utf8', env: { ...process.env, PYTHONUTF8: '1' } });
   assert.equal(run.status, 0, run.stderr);
   const lines = run.stdout.trim().split('\n');
