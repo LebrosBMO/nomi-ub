@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
-import { STATUS_LABELS, type Claim, type ClaimStatus } from '@/utils/business';
+import { SERVICE_STYLE_LABELS, STATUS_LABELS, type Claim, type ClaimStatus } from '@/utils/business';
 import { categoryName } from '@/utils/category-match';
 import { dayInUB } from '@/utils/personal';
 
@@ -102,6 +102,7 @@ export function AdminPage() {
               {!!claim.phones.length && <Text style={styles.claimLine}>Утас: {claim.phones.join(', ')}</Text>}
               {!!claim.hours && <Text style={styles.claimLine}>Цаг: {claim.hours}</Text>}
               {!!claim.addressNote && <Text style={styles.claimLine}>Хаяг: {claim.addressNote}</Text>}
+              {!!claim.serviceStyle && <Text style={styles.claimLine}>Үйлчилгээ: {SERVICE_STYLE_LABELS[claim.serviceStyle]}</Text>}
               {!!claim.serviceAreas.length && <Text style={styles.claimLine}>Очдог дүүрэг: {claim.serviceAreas.join(', ')}</Text>}
               {!!claim.note && <Text style={styles.claimLine}>Тайлбар: {claim.note}</Text>}
               <View style={styles.marks}>

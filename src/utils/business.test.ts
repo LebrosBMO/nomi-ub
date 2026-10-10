@@ -77,6 +77,25 @@ test('A correction is taken only with the owner checkbox, a contact and 8-digit 
   assert.deepEqual('claim' in areas ? areas.claim.serviceAreas : null, ['БЗД', 'ЧД']);
 });
 
+test('The owner says how the service works, and one that only goes out must name the districts', () => {
+  const ok = (body: unknown) => {
+    const result = readClaim(body, known);
+    return 'claim' in result ? result.claim.serviceStyle : ('error: ' + result.error);
+  };
+  // Not answering is allowed: the category's own default then stands.
+  assert.equal(ok(draft()), null);
+  assert.equal(ok(draft({ serviceStyle: '' })), null);
+  assert.equal(ok(draft({ serviceStyle: 'visit' })), 'visit');
+  assert.equal(ok(draft({ serviceStyle: 'both', serviceAreas: ['БЗД'] })), 'both');
+  assert.equal(ok(draft({ serviceStyle: 'callout', serviceAreas: ['БЗД', 'ЧД'] })), 'callout');
+  assert.equal(ok(draft({ serviceStyle: 'mobile' })), 'error: invalid_service_style');
+  // Saying "I go to the customer" and naming no district leaves the card with nothing to show.
+  assert.equal(ok(draft({ serviceStyle: 'callout' })), 'error: invalid_district');
+  assert.equal(ok(draft({ serviceStyle: 'callout', serviceAreas: [] })), 'error: invalid_district');
+  // A shop is not asked for districts.
+  assert.equal(ok(draft({ serviceStyle: 'visit', serviceAreas: [] })), 'visit');
+});
+
 test('A business that is not in the catalog yet needs a name and a registry category; a partner request needs the place', () => {
   const added = readClaim(draft({ placeId: null, businessName: 'Шинэ дугуй засвар', category: 'tire' }), known);
   assert.ok('claim' in added);

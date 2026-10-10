@@ -5,6 +5,22 @@ import {districtNames,type Place} from './core.ts';
  * The business-owner side (/business): finding one's own listing, the correction a claim carries and the partner request. Shared
  * by the page and by the API routes (src/server/portal.ts), so both check the same rules. Nothing here touches the store.
  */
+/**
+ * How the customer gets the service, as the owner says it rather than as the category guesses. The registry's `categoryMode`
+ * is a fair default — a plumber comes to you, a pharmacy does not — but only the owner knows that their tyre shop also drives
+ * out, or that they gave up the workshop and now work from the van. It decides what the card leads with: an address and a map,
+ * or the districts they serve and a call button.
+ */
+export const SERVICE_STYLES=['visit','callout','both'] as const;
+export type ServiceStyle=(typeof SERVICE_STYLES)[number];
+export const isServiceStyle=(value:unknown):value is ServiceStyle=>typeof value==='string'&&(SERVICE_STYLES as readonly string[]).includes(value);
+/** What the owner page offers, in the owner's words. */
+export const SERVICE_STYLE_LABELS:Record<ServiceStyle,string>={
+ visit:'Үйлчлүүлэгч над дээр ирдэг',
+ callout:'Би үйлчлүүлэгч рүү очдог',
+ both:'Хоёулаа — ирж ч болно, очиж ч өгнө',
+};
+
 export const CLAIM_KINDS=['claim','partner'] as const;
 export type ClaimKind=(typeof CLAIM_KINDS)[number];
 export const CLAIM_STATUSES=['pending','approved','rejected','called'] as const;
@@ -25,6 +41,8 @@ export type ClaimDraft={
  businessName:string;
  /** A registry category id, for a business that is not in the catalog yet. */
  category:string|null;
+ /** How the service works, as the owner says it. Null when they did not answer, and the category's own default stands. */
+ serviceStyle:ServiceStyle|null;
  phones:string[];
  hours:string;
  addressNote:string;
@@ -38,7 +56,7 @@ export type ClaimDraft={
 };
 export type Claim=ClaimDraft&{id:string;status:ClaimStatus;createdAt:string};
 
-export type ClaimError='invalid_body'|'invalid_kind'|'unknown_place'|'missing_business'|'invalid_category'|'invalid_phone'|'too_many_phones'|'invalid_district'|'missing_contact'|'not_owner'|'too_long';
+export type ClaimError='invalid_body'|'invalid_kind'|'unknown_place'|'missing_business'|'invalid_category'|'invalid_service_style'|'invalid_phone'|'too_many_phones'|'invalid_district'|'missing_contact'|'not_owner'|'too_long';
 /** What the page says when a check fails, whether its own or the server's answer. */
 export const CLAIM_ERRORS:Record<ClaimError,string>={
  invalid_body:'Хүсэлтийг уншиж чадсангүй. Дахин оролдоно уу.',
@@ -46,6 +64,7 @@ export const CLAIM_ERRORS:Record<ClaimError,string>={
  unknown_place:'Газраа дахин сонгоно уу.',
  missing_business:'Газрын нэрээ бичнэ үү.',
  invalid_category:'Үйлчилгээний төрлөө сонгоно уу.',
+ invalid_service_style:'Үйлчилгээ хэрхэн явагддагийг сонгоно уу.',
  invalid_phone:'Утасны дугаар 8 оронтой байх ёстой.',
  too_many_phones:`Утасны дугаар ${LIMITS.phones} хүртэл байж болно.`,
  invalid_district:'Дүүргийг дахин сонгоно уу.',
@@ -89,14 +108,18 @@ export function readClaim(body:unknown,knownPlace:(placeId:string)=>boolean):{cl
  if(supplied.length>LIMITS.phones)return {error:'too_many_phones'};
  const phones=[...new Set(supplied.map(p=>typeof p==='string'?phoneDigits(p):'').filter(Boolean))];
  if(phones.some(p=>!MONGOLIAN_PHONE.test(p)))return {error:'invalid_phone'};
+ const serviceStyle=v.serviceStyle==null||v.serviceStyle===''?null:isServiceStyle(v.serviceStyle)?v.serviceStyle:undefined;
+ if(serviceStyle===undefined)return {error:'invalid_service_style'};
  const serviceAreas=Array.isArray(v.serviceAreas)?[...new Set(v.serviceAreas.filter((a):a is string=>typeof a==='string'))]:[];
  if(serviceAreas.length>LIMITS.areas||serviceAreas.some(a=>!districtNames.includes(a)))return {error:'invalid_district'};
+ // A business that only goes out has no district of its own to serve from, so saying so and naming none is a half-answer.
+ if(serviceStyle==='callout'&&!serviceAreas.length)return {error:'invalid_district'};
  const contactPhone=typeof v.contactPhone==='string'?phoneDigits(v.contactPhone):'';
  if(!ownerName)return {error:'missing_contact'};
  if(!MONGOLIAN_PHONE.test(contactPhone))return {error:'invalid_phone'};
  const isOwner=v.isOwner===true;
  if(v.kind==='claim'&&!isOwner)return {error:'not_owner'};
- return {claim:{kind:v.kind,placeId,businessName:businessName as string,category,phones,hours:hours as string,addressNote:addressNote as string,serviceAreas,ownerName:ownerName as string,contactPhone,isOwner,note:note as string}};
+ return {claim:{kind:v.kind,placeId,businessName:businessName as string,category,serviceStyle,phones,hours:hours as string,addressNote:addressNote as string,serviceAreas,ownerName:ownerName as string,contactPhone,isOwner,note:note as string}};
 }
 
 /**

@@ -9,14 +9,14 @@ import { fileURLToPath } from 'node:url';
 const script = fileURLToPath(new URL('./apply-owner-edits.mjs', import.meta.url));
 
 type Row = { id: string; address: string; phones: string[]; hoursClaim: string; qualityFlags: string[]; verifiedAt: string | null; checkStatus: string; serviceAreas?: string[] };
-type Log = { edits: number; applied: number; phoneVerified: number; newBusinesses: number; unmatched: string[]; written: boolean };
+type Log = { edits: number; applied: number; comesToYou: number; phoneVerified: number; newBusinesses: number; unmatched: string[]; written: boolean };
 
 const record = (id: string, extra: Partial<Row> = {}): Row => ({
   id,
   address: 'Нарийвчилсан хаяг дутуу',
   phones: ['99000000'],
   hoursClaim: 'Ажиллах цагийг лавлана уу',
-  qualityFlags: ['not_contact_verified'],
+  qualityFlags: ['not_contact_verified', 'mobile_service'],
   verifiedAt: null,
   checkStatus: 'Шалгаагүй',
   ...extra,
@@ -43,8 +43,8 @@ test('An approved correction reaches the catalog, an owner saying their hours is
       {
         version: 1,
         edits: [
-          { claimId: 'cl_1', placeId: 'tire:7', phones: ['+976 8844 5566', '88445566', '123'], hours: 'Да-Ба  09:00-19:00', address: ' 3-р хороолол, Их дэлгүүрийн баруун талд ', serviceAreas: ['БЗД', 'БЗД', 'Дархан'] },
-          { claimId: 'cl_2', placeId: 'apteka:2086', phones: [], hours: '', address: '', serviceAreas: [], phoneVerifiedAt: '2026-10-09' },
+          { claimId: 'cl_1', placeId: 'tire:7', serviceStyle: 'callout', phones: ['+976 8844 5566', '88445566', '123'], hours: 'Да-Ба  09:00-19:00', address: ' 3-р хороолол, Их дэлгүүрийн баруун талд ', serviceAreas: ['БЗД', 'БЗД', 'Дархан'] },
+          { claimId: 'cl_2', placeId: 'apteka:2086', serviceStyle: 'visit', phones: [], hours: '', address: '', serviceAreas: [], phoneVerifiedAt: '2026-10-09' },
           { claimId: 'cl_3', placeId: 'tire:404', phones: ['99112233'], hours: '', address: '', serviceAreas: [] },
           { claimId: 'cl_4', placeId: null, businessName: 'Шинэ дугуй засвар', category: 'tire', phones: ['99112233'], hours: '', address: '', serviceAreas: [] },
         ],
@@ -56,7 +56,7 @@ test('An approved correction reaches the catalog, an owner saying their hours is
   );
 
   const first = run(dir);
-  assert.deepEqual(first.log, { catalog: path.join(dir, 'directory.json'), edits: 4, applied: 2, phoneVerified: 1, newBusinesses: 1, unmatched: ['tire:404'], written: true } as unknown as Log);
+  assert.deepEqual(first.log, { catalog: path.join(dir, 'directory.json'), edits: 4, applied: 2, comesToYou: 1, phoneVerified: 1, newBusinesses: 1, unmatched: ['tire:404'], written: true } as unknown as Log);
   const [tire, pharmacy, untouched] = first.rows;
   // Phones are kept as 8 digits, each once, and a number that is not one is left out.
   assert.deepEqual(tire.phones, ['88445566']);
@@ -65,6 +65,8 @@ test('An approved correction reaches the catalog, an owner saying their hours is
   // Only the nine districts, each once.
   assert.deepEqual(tire.serviceAreas, ['БЗД']);
   assert.ok(tire.qualityFlags.includes('owner_corrected'));
+  // The owner said they go out, so the card leads with the call button and the districts (mobile_service).
+  assert.ok(tire.qualityFlags.includes('mobile_service'));
   // The owner's own word is not a check.
   assert.equal(tire.checkStatus, 'Шалгаагүй');
   assert.equal(tire.verifiedAt, null);
@@ -72,6 +74,8 @@ test('An approved correction reaches the catalog, an owner saying their hours is
   assert.equal(pharmacy.checkStatus, 'Баталгаажсан');
   assert.equal(pharmacy.verifiedAt, '2026-10-09');
   assert.ok(!pharmacy.qualityFlags.includes('not_contact_verified'));
+  // And "customers come to me" takes the flag back off, whatever the category assumed.
+  assert.ok(!pharmacy.qualityFlags.includes('mobile_service'));
   // An empty field leaves what the catalog had.
   assert.deepEqual(pharmacy.phones, ['99000000']);
   assert.equal(pharmacy.hoursClaim, 'Ажиллах цагийг лавлана уу');

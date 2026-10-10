@@ -10,6 +10,7 @@ const claim = (id: string, extra: Partial<Claim> = {}): Claim => ({
   placeId: 'apteka:2086',
   businessName: 'Монос 12 эмийн сан',
   category: null,
+  serviceStyle: null,
   phones: ['99112233'],
   hours: 'Да-Ба 09:00-19:00',
   addressNote: '3-р хороолол',

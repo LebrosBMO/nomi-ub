@@ -1,4 +1,4 @@
-import type {Claim,ClaimKind,ClaimStatus} from '../utils/business.ts';
+import type {Claim,ClaimKind,ClaimStatus,ServiceStyle} from '../utils/business.ts';
 
 /**
  * Where the business-owner side keeps what has to outlive one request: the anonymous counters, the owner requests and the rate
@@ -64,9 +64,9 @@ export function memoryStore():Store&{claims:()=>Claim[]}{
 }
 
 /** The claims table as the app reads it, and back. Postgres keeps snake_case; the app keeps the shape the pages send. */
-type ClaimRow={id:string;kind:string;status:string;place_id:string|null;business_name:string;category:string|null;phones:string[];hours:string;address_note:string;service_areas:string[];owner_name:string;contact_phone:string;is_owner:boolean;note:string;created_at:string};
-const toRow=(c:Claim):ClaimRow=>({id:c.id,kind:c.kind,status:c.status,place_id:c.placeId,business_name:c.businessName,category:c.category,phones:c.phones,hours:c.hours,address_note:c.addressNote,service_areas:c.serviceAreas,owner_name:c.ownerName,contact_phone:c.contactPhone,is_owner:c.isOwner,note:c.note,created_at:c.createdAt});
-const fromRow=(r:ClaimRow):Claim=>({id:r.id,kind:r.kind as ClaimKind,status:r.status as ClaimStatus,placeId:r.place_id,businessName:r.business_name??'',category:r.category,phones:r.phones??[],hours:r.hours??'',addressNote:r.address_note??'',serviceAreas:r.service_areas??[],ownerName:r.owner_name??'',contactPhone:r.contact_phone??'',isOwner:Boolean(r.is_owner),note:r.note??'',createdAt:new Date(r.created_at).toISOString()});
+type ClaimRow={id:string;kind:string;status:string;place_id:string|null;business_name:string;category:string|null;service_style:string|null;phones:string[];hours:string;address_note:string;service_areas:string[];owner_name:string;contact_phone:string;is_owner:boolean;note:string;created_at:string};
+const toRow=(c:Claim):ClaimRow=>({id:c.id,kind:c.kind,status:c.status,place_id:c.placeId,business_name:c.businessName,category:c.category,service_style:c.serviceStyle,phones:c.phones,hours:c.hours,address_note:c.addressNote,service_areas:c.serviceAreas,owner_name:c.ownerName,contact_phone:c.contactPhone,is_owner:c.isOwner,note:c.note,created_at:c.createdAt});
+const fromRow=(r:ClaimRow):Claim=>({id:r.id,kind:r.kind as ClaimKind,status:r.status as ClaimStatus,placeId:r.place_id,businessName:r.business_name??'',category:r.category,serviceStyle:(r.service_style as ServiceStyle|null)??null,phones:r.phones??[],hours:r.hours??'',addressNote:r.address_note??'',serviceAreas:r.service_areas??[],ownerName:r.owner_name??'',contactPhone:r.contact_phone??'',isOwner:Boolean(r.is_owner),note:r.note??'',createdAt:new Date(r.created_at).toISOString()});
 
 /** Supabase's REST API (PostgREST) and the two functions in supabase/schema.sql. */
 export function supabaseStore(url:string,serviceKey:string):Store{

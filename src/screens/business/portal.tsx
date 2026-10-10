@@ -6,7 +6,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 import { CATEGORY_DATA, GROUPS, type CategoryDef } from '@/data/categories';
-import { CLAIM_ERRORS, LIMITS, PARTNER, readClaim, searchBusinesses, type ClaimDraft } from '@/utils/business';
+import { CLAIM_ERRORS, LIMITS, PARTNER, readClaim, searchBusinesses, SERVICE_STYLE_LABELS, SERVICE_STYLES, type ClaimDraft, type ServiceStyle } from '@/utils/business';
 import { CATEGORIES, categoryMode, categoryName, matchCategories, skeleton } from '@/utils/category-match';
 import { districtNames, verificationLabel, type Place } from '@/utils/core';
 import { defaultWeek, formatHours, type Week } from '@/utils/hours';
@@ -170,6 +170,13 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
   const [phones, setPhones] = useState<string[]>(() => [...(place?.phones ?? []), '', '', ''].slice(0, LIMITS.phones));
   // Hours are chosen, not typed (src/utils/hours.ts). `setting` off means the owner is not changing them, so nothing is sent
   // and whatever the catalog holds stays as it is.
+  // How the service works, as the owner says it. It starts from what the catalog assumes — the category's mode, and the
+  // mobile_service flag the importer sets — so an owner who agrees only has to leave it alone.
+  const [style, setStyle] = useState<ServiceStyle>(() => {
+    const assumed = categoryMode(place?.category ?? category ?? '');
+    if (place?.qualityFlags.includes('mobile_service')) return assumed === 'both' ? 'both' : 'callout';
+    return assumed === 'visit' ? 'visit' : assumed;
+  });
   const [setting, setSetting] = useState(false);
   const [week, setWeek] = useState<Week>(defaultWeek);
   const hours = setting ? formatHours(week) : '';
@@ -183,9 +190,8 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
   const [problem, setProblem] = useState('');
   const [sent, setSent] = useState(false);
 
-  // A business that comes to the customer is asked about its districts first; a shop is asked quietly, in case it also comes.
-  const mode = categoryMode(place?.category ?? category ?? '');
-  const comesToYou = mode !== 'visit';
+  // Asked about districts first if they go out, quietly if they do not — on the owner's own answer, not the category's guess.
+  const comesToYou = style !== 'visit';
 
   async function submit() {
     const draft: ClaimDraft = {
@@ -193,6 +199,7 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
       placeId: place?.id ?? null,
       businessName: place ? place.name : businessName,
       category: place ? null : category,
+      serviceStyle: style,
       phones: phones.map((p) => p.trim()).filter(Boolean),
       hours,
       addressNote,
@@ -234,6 +241,29 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
           <CategoryPicker chosen={category} onChoose={setCategory} />
         </>
       )}
+      <View style={styles.styleBlock}>
+        <Label>Үйлчилгээ хэрхэн явагддаг вэ?</Label>
+        {SERVICE_STYLES.map((option) => (
+          <Pressable
+            key={option}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: style === option }}
+            accessibilityLabel={SERVICE_STYLE_LABELS[option]}
+            onPress={() => setStyle(option)}
+            style={[styles.styleRow, style === option && styles.styleRowOn]}>
+            <Ionicons name={style === option ? 'radio-button-on' : 'radio-button-off'} size={20} color={style === option ? Colors.primary : Colors.textMuted} />
+            <Text style={styles.styleText}>{SERVICE_STYLE_LABELS[option]}</Text>
+          </Pressable>
+        ))}
+        <Hint>
+          {style === 'visit'
+            ? 'Карт дээр хаяг, газрын зураг харагдана.'
+            : style === 'callout'
+              ? 'Карт дээр хаягийн оронд “Таны байршил дээр очдог” гэж гарч, залгах том товч эхэнд байна.'
+              : 'Карт дээр хаяг ч, очдог дүүрэг ч хоёулаа харагдана.'}
+        </Hint>
+      </View>
+
       {phones.map((phone, index) => (
         <Field
           key={index}
@@ -344,6 +374,7 @@ function PartnerOffer({ place }: { place: Place | null }) {
       placeId: place.id,
       businessName: place.name,
       category: null,
+      serviceStyle: null,
       phones: [],
       hours: '',
       addressNote: '',
@@ -421,6 +452,10 @@ const styles = StyleSheet.create({
   districtGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
   districtCell: { width: '50%', minWidth: 130 },
   hours: { marginTop: 16 },
+  styleBlock: { marginTop: 16 },
+  styleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 10, borderRadius: 12 },
+  styleRowOn: { backgroundColor: Colors.tint },
+  styleText: { fontSize: 14, color: Colors.text, flexShrink: 1 },
   ownerCheck: { marginTop: 16 },
   offer: { fontSize: 14, color: Colors.text, marginBottom: 6 },
   bullet: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: 4 },

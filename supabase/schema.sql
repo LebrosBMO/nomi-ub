@@ -20,6 +20,7 @@ create table if not exists public.claims (
   place_id text,                             -- null for a business not in the catalog yet
   business_name text not null default '',
   category text,
+  service_style text,                         -- visit | callout | both, as the owner says it
   phones text[] not null default '{}',
   hours text not null default '',
   address_note text not null default '',

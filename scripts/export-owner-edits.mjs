@@ -45,6 +45,7 @@ const edits = items
     placeId: claim.placeId ?? null,
     businessName: claim.businessName ?? '',
     category: claim.category ?? null,
+    serviceStyle: claim.serviceStyle ?? null,
     phones: Array.isArray(claim.phones) ? claim.phones : [],
     hours: claim.hours ?? '',
     address: claim.addressNote ?? '',
