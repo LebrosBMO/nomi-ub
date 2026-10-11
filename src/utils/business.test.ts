@@ -94,6 +94,10 @@ test('The owner says how the service works, and one that only goes out must name
   assert.equal(ok(draft({ serviceStyle: 'callout', serviceAreas: [] })), 'error: invalid_district');
   // A shop is not asked for districts.
   assert.equal(ok(draft({ serviceStyle: 'visit', serviceAreas: [] })), 'visit');
+  // Nobody travels for an online business, so it is not asked either, and a district it ticked first is dropped, not refused.
+  assert.equal(ok(draft({ serviceStyle: 'online' })), 'online');
+  const cleared = readClaim(draft({ serviceStyle: 'online', serviceAreas: ['БЗД', 'ЧД'] }), known);
+  assert.deepEqual('claim' in cleared ? cleared.claim.serviceAreas : null, []);
 });
 
 test('A business that is not in the catalog yet needs a name and a registry category; a partner request needs the place', () => {

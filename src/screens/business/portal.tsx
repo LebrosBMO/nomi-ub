@@ -9,6 +9,7 @@ import { CATEGORY_DATA, GROUPS, type CategoryDef } from '@/data/categories';
 import { CLAIM_ERRORS, LIMITS, PARTNER, readClaim, searchBusinesses, SERVICE_STYLE_LABELS, SERVICE_STYLES, type ClaimDraft, type ServiceStyle } from '@/utils/business';
 import { CATEGORIES, categoryMode, categoryName, matchCategories, skeleton } from '@/utils/category-match';
 import { districtNames, verificationLabel, type Place } from '@/utils/core';
+import { MOBILE_SERVICE, ONLINE_SERVICE, WORKS_ONLINE } from '@/utils/location';
 import { defaultWeek, formatHours, type Week } from '@/utils/hours';
 import { placeById, places } from '@/utils/places';
 
@@ -138,7 +139,8 @@ function InstallCard() {
 
 /** "Nomi дээр ингэж харагдана": the same fields and the same words the chat's card uses. */
 function Preview({ place, onClear }: { place: Place; onClear: () => void }) {
-  const comes = categoryMode(place.category) !== 'visit' || place.qualityFlags.includes('mobile_service');
+  const online = place.qualityFlags.includes(ONLINE_SERVICE);
+  const comes = !online && (categoryMode(place.category) !== 'visit' || place.qualityFlags.includes(MOBILE_SERVICE));
   return (
     <Section heading="Nomi дээр ингэж харагдана">
       <View style={styles.card}>
@@ -148,7 +150,7 @@ function Preview({ place, onClear }: { place: Place; onClear: () => void }) {
             <Text style={[styles.badgeText, place.verifiedAt ? styles.badgeTextOn : styles.badgeTextOff]}>{verificationLabel(place)}</Text>
           </View>
         </View>
-        <Text style={styles.cardLine}>{place.address && place.address !== NO_ADDRESS ? place.address : 'Хаягийг утсаар лавлана уу.'}</Text>
+        <Text style={styles.cardLine}>{online ? WORKS_ONLINE : place.address && place.address !== NO_ADDRESS ? place.address : 'Хаягийг утсаар лавлана уу.'}</Text>
         <Text style={styles.cardLine}>
           {place.verifiedAt ? 'Цаг: ' : 'Цаг (баталгаажаагүй): '}
           {place.hoursClaim}
@@ -174,7 +176,8 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
   // mobile_service flag the importer sets — so an owner who agrees only has to leave it alone.
   const [style, setStyle] = useState<ServiceStyle>(() => {
     const assumed = categoryMode(place?.category ?? category ?? '');
-    if (place?.qualityFlags.includes('mobile_service')) return assumed === 'both' ? 'both' : 'callout';
+    if (place?.qualityFlags.includes(ONLINE_SERVICE)) return 'online';
+    if (place?.qualityFlags.includes(MOBILE_SERVICE)) return assumed === 'both' ? 'both' : 'callout';
     return assumed === 'visit' ? 'visit' : assumed;
   });
   const [setting, setSetting] = useState(false);
@@ -190,8 +193,10 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
   const [problem, setProblem] = useState('');
   const [sent, setSent] = useState(false);
 
-  // Asked about districts first if they go out, quietly if they do not — on the owner's own answer, not the category's guess.
-  const comesToYou = style !== 'visit';
+  // Asked about districts first if they go out, quietly if they stay put, and not at all if nobody travels — on the owner's own
+  // answer, not the category's guess.
+  const comesToYou = style === 'callout' || style === 'both';
+  const online = style === 'online';
 
   async function submit() {
     const draft: ClaimDraft = {
@@ -260,7 +265,9 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
             ? 'Карт дээр хаяг, газрын зураг харагдана.'
             : style === 'callout'
               ? 'Карт дээр хаягийн оронд “Таны байршил дээр очдог” гэж гарч, залгах том товч эхэнд байна.'
-              : 'Карт дээр хаяг ч, очдог дүүрэг ч хоёулаа харагдана.'}
+              : style === 'both'
+                ? 'Карт дээр хаяг ч, очдог дүүрэг ч хоёулаа харагдана.'
+                : 'Карт дээр хаяг, газрын зураг гарахгүй. “Онлайн, утсаар үйлчилдэг” гэж гарч, залгах том товч эхэнд байна.'}
         </Hint>
       </View>
 
@@ -286,15 +293,21 @@ function ClaimForm({ place, adding }: { place: Place | null; adding: boolean }) 
           </>
         )}
       </View>
-      <Field
-        label="Хаягийн тэмдэглэл"
-        placeholder="Жишээ: 3-р хороолол, Их дэлгүүрийн баруун талд, 1-р давхар"
-        value={addressNote}
-        onChangeText={setAddressNote}
-        maxLength={LIMITS.addressNote}
-        multiline
-      />
-      <DistrictPicker areas={areas} onToggle={(d) => setAreas(areas.includes(d) ? areas.filter((a) => a !== d) : [...areas, d])} prominent={comesToYou} />
+      {!online && (
+        <Field
+          label="Хаягийн тэмдэглэл"
+          placeholder="Жишээ: 3-р хороолол, Их дэлгүүрийн баруун талд, 1-р давхар"
+          value={addressNote}
+          onChangeText={setAddressNote}
+          maxLength={LIMITS.addressNote}
+          multiline
+        />
+      )}
+      {online ? (
+        <Hint>Дүүрэг асуухгүй: онлайн үйлчилгээг Nomi бүх дүүргийн хайлтад харуулна.</Hint>
+      ) : (
+        <DistrictPicker areas={areas} onToggle={(d) => setAreas(areas.includes(d) ? areas.filter((a) => a !== d) : [...areas, d])} prominent={comesToYou} />
+      )}
       <Field label="Таны нэр" placeholder="Жишээ: Б. Ганбат" value={ownerName} onChangeText={setOwnerName} maxLength={LIMITS.ownerName} />
       <Field label="Холбоо барих утас" placeholder="99112233" value={contactPhone} onChangeText={setContactPhone} inputMode="tel" maxLength={20} hint="Nomi энэ дугаар луу залгаж батлуулна." />
       <Field label="Нэмэлт тайлбар (заавал биш)" placeholder="Өөр зүйл хэлэх бол бичээрэй" value={note} onChangeText={setNote} maxLength={LIMITS.note} multiline />

@@ -27,6 +27,9 @@ export const DISTANCE_UNKNOWN = 'Байршил тодорхойгүй, утса
 /** The card line for a shop that comes to the customer (the import flags it "mobile_service"): its distance does not matter. */
 export const COMES_TO_YOU = 'Таны байршил дээр очдог';
 export const MOBILE_SERVICE = 'mobile_service';
+/** The card line for a business nobody travels to (the owner says `online`): it is reached by phone or online, from anywhere. */
+export const WORKS_ONLINE = 'Онлайн, утсаар үйлчилдэг';
+export const ONLINE_SERVICE = 'online_service';
 /** How long one fix may take before the search goes on without it. */
 export const POSITION_TIMEOUT_MS = 10_000;
 

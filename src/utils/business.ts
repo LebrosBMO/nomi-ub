@@ -10,8 +10,13 @@ import {districtNames,type Place} from './core.ts';
  * is a fair default — a plumber comes to you, a pharmacy does not — but only the owner knows that their tyre shop also drives
  * out, or that they gave up the workshop and now work from the van. It decides what the card leads with: an address and a map,
  * or the districts they serve and a call button.
+ *
+ * `online` is the fourth case the category registry cannot express at all: nobody travels, because the work goes over the phone,
+ * Messenger or a file — a нягтлан, a хуульч, an орчуулагч, a web developer, a даатгалын агент. An address and a district are both
+ * meaningless for them, and their market is the whole country, so the card drops the map and the search stops filtering them by
+ * district (`online_service` in src/utils/location.ts).
  */
-export const SERVICE_STYLES=['visit','callout','both'] as const;
+export const SERVICE_STYLES=['visit','callout','both','online'] as const;
 export type ServiceStyle=(typeof SERVICE_STYLES)[number];
 export const isServiceStyle=(value:unknown):value is ServiceStyle=>typeof value==='string'&&(SERVICE_STYLES as readonly string[]).includes(value);
 /** What the owner page offers, in the owner's words. */
@@ -19,6 +24,7 @@ export const SERVICE_STYLE_LABELS:Record<ServiceStyle,string>={
  visit:'Үйлчлүүлэгч над дээр ирдэг',
  callout:'Би үйлчлүүлэгч рүү очдог',
  both:'Хоёулаа — ирж ч болно, очиж ч өгнө',
+ online:'Хэн ч хаашаа ч явахгүй — онлайн, утсаар',
 };
 
 export const CLAIM_KINDS=['claim','partner'] as const;
@@ -114,12 +120,14 @@ export function readClaim(body:unknown,knownPlace:(placeId:string)=>boolean):{cl
  if(serviceAreas.length>LIMITS.areas||serviceAreas.some(a=>!districtNames.includes(a)))return {error:'invalid_district'};
  // A business that only goes out has no district of its own to serve from, so saying so and naming none is a half-answer.
  if(serviceStyle==='callout'&&!serviceAreas.length)return {error:'invalid_district'};
+ // Nobody travels for an online business, so a district it ticked before the owner changed their answer is dropped, not refused.
+ const areas=serviceStyle==='online'?[]:serviceAreas;
  const contactPhone=typeof v.contactPhone==='string'?phoneDigits(v.contactPhone):'';
  if(!ownerName)return {error:'missing_contact'};
  if(!MONGOLIAN_PHONE.test(contactPhone))return {error:'invalid_phone'};
  const isOwner=v.isOwner===true;
  if(v.kind==='claim'&&!isOwner)return {error:'not_owner'};
- return {claim:{kind:v.kind,placeId,businessName:businessName as string,category,serviceStyle,phones,hours:hours as string,addressNote:addressNote as string,serviceAreas,ownerName:ownerName as string,contactPhone,isOwner,note:note as string}};
+ return {claim:{kind:v.kind,placeId,businessName:businessName as string,category,serviceStyle,phones,hours:hours as string,addressNote:addressNote as string,serviceAreas:areas,ownerName:ownerName as string,contactPhone,isOwner,note:note as string}};
 }
 
 /**

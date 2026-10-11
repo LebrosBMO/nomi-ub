@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const script = fileURLToPath(new URL('./apply-owner-edits.mjs', import.meta.url));
 
 type Row = { id: string; address: string; phones: string[]; hoursClaim: string; qualityFlags: string[]; verifiedAt: string | null; checkStatus: string; serviceAreas?: string[] };
-type Log = { edits: number; applied: number; comesToYou: number; phoneVerified: number; newBusinesses: number; unmatched: string[]; written: boolean };
+type Log = { edits: number; applied: number; comesToYou: number; online: number; phoneVerified: number; newBusinesses: number; unmatched: string[]; written: boolean };
 
 const record = (id: string, extra: Partial<Row> = {}): Row => ({
   id,
@@ -35,7 +35,7 @@ function run(dir: string) {
 
 test('An approved correction reaches the catalog, an owner saying their hours is still unchecked, and a second run changes nothing', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nomi-owner-edits-'));
-  const catalog = [record('tire:7'), record('apteka:2086'), record('tire:9')];
+  const catalog = [record('tire:7'), record('apteka:2086'), record('tire:9'), record('acc:5', { serviceAreas: ['БЗД'] })];
   fs.writeFileSync(path.join(dir, 'directory.json'), JSON.stringify(catalog, null, 2), 'utf8');
   fs.writeFileSync(
     path.join(dir, 'owner-edits.json'),
@@ -47,6 +47,7 @@ test('An approved correction reaches the catalog, an owner saying their hours is
           { claimId: 'cl_2', placeId: 'apteka:2086', serviceStyle: 'visit', phones: [], hours: '', address: '', serviceAreas: [], phoneVerifiedAt: '2026-10-09' },
           { claimId: 'cl_3', placeId: 'tire:404', phones: ['99112233'], hours: '', address: '', serviceAreas: [] },
           { claimId: 'cl_4', placeId: null, businessName: 'Шинэ дугуй засвар', category: 'tire', phones: ['99112233'], hours: '', address: '', serviceAreas: [] },
+          { claimId: 'cl_5', placeId: 'acc:5', serviceStyle: 'online', phones: [], hours: '', address: '', serviceAreas: [] },
         ],
       },
       null,
@@ -56,8 +57,8 @@ test('An approved correction reaches the catalog, an owner saying their hours is
   );
 
   const first = run(dir);
-  assert.deepEqual(first.log, { catalog: path.join(dir, 'directory.json'), edits: 4, applied: 2, comesToYou: 1, phoneVerified: 1, newBusinesses: 1, unmatched: ['tire:404'], written: true } as unknown as Log);
-  const [tire, pharmacy, untouched] = first.rows;
+  assert.deepEqual(first.log, { catalog: path.join(dir, 'directory.json'), edits: 5, applied: 3, comesToYou: 1, online: 1, phoneVerified: 1, newBusinesses: 1, unmatched: ['tire:404'], written: true } as unknown as Log);
+  const [tire, pharmacy, untouched, accountant] = first.rows;
   // Phones are kept as 8 digits, each once, and a number that is not one is left out.
   assert.deepEqual(tire.phones, ['88445566']);
   assert.equal(tire.hoursClaim, 'Да-Ба 09:00-19:00');
@@ -81,6 +82,10 @@ test('An approved correction reaches the catalog, an owner saying their hours is
   assert.equal(pharmacy.hoursClaim, 'Ажиллах цагийг лавлана уу');
   // A place no edit names is untouched, down to its flags.
   assert.deepEqual(untouched, record('tire:9'));
+  // "Nobody travels to me": the card drops the address and the map, and the districts it was listed under say nothing true.
+  assert.ok(accountant.qualityFlags.includes('online_service'));
+  assert.ok(!accountant.qualityFlags.includes('mobile_service'));
+  assert.equal(accountant.serviceAreas, undefined);
   assert.match(first.stderr, /tire:404/);
 
   const second = run(dir);

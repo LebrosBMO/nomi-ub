@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {interpretLocal,findPlaces,distanceKm,validateIntent,mapsLink,safeUrl,validServerUrl,landmarkQuery,sourceLabel,verificationLabel,closingMinutes,wantsNight,openAtNight,inCategory,type Place} from './core.ts';
+import {interpretLocal,findPlaces,servesDistrict,distanceKm,validateIntent,mapsLink,safeUrl,validServerUrl,landmarkQuery,sourceLabel,verificationLabel,closingMinutes,wantsNight,openAtNight,inCategory,type Place} from './core.ts';
 import {dayInUB} from './personal.ts';
 const cases=JSON.parse(fs.readFileSync(new URL('./core.cases.json',import.meta.url),'utf8'));
 for(const c of cases){test(`Mongolian regression ${c.id}: ${c.text}`,()=>{const got=interpretLocal(c.text,c.previous);for(const [k,v] of Object.entries(c.expected))assert.deepEqual((got as any)[k],v,k);});}
@@ -13,6 +13,18 @@ test('Phone search accepts country code and spacing',()=>{const p=[{id:'a',name:
 test('A business that comes to you and names no district shows in every district search',()=>{const p=[{id:'shop',name:'A',category:'plumber',district:'БГД',address:'',phones:['99000001'],qualityFlags:[]},{id:'oncall',name:'B',category:'plumber',district:null,address:'',phones:['99000002'],qualityFlags:['mobile_service']},{id:'nowhere',name:'C',category:'plumber',district:null,address:'',phones:['99000003'],qualityFlags:[]}] as unknown as Place[];assert.deepEqual(findPlaces(p,{category:'plumber',district:'БЗД'}).map(x=>x.id),['oncall']);assert.deepEqual(findPlaces(p,{category:'plumber',district:'БГД'}).map(x=>x.id).sort(),['oncall','shop']);});
 test('AC 4.2: verification label says Шалгаагүй for null and Баталгаажсан plus the date otherwise',()=>{assert.equal(verificationLabel({verifiedAt:null}),'Шалгаагүй');assert.equal(verificationLabel({verifiedAt:'2026-09-18'}),'Баталгаажсан · 2026-09-18');assert.equal(verificationLabel({verifiedAt:'2026-09-18T17:30:00Z'}),'Баталгаажсан · 2026-09-19');assert.equal(verificationLabel({verifiedAt:'2026-09-18T23:30:00+08:00'}),'Баталгаажсан · 2026-09-18');assert.equal(verificationLabel({verifiedAt:''}),'Шалгаагүй');});
 test('Source label comes from the hostname and never opens a non-web link',()=>{assert.equal(sourceLabel('https://www.facebook.com/ZuslanGazarHouse/'),'Facebook');assert.equal(sourceLabel('https://m.facebook.com/p/x'),'Facebook');assert.equal(sourceLabel('https://www.google.com/maps/place/x/data=!4m7?hl=en'),'Google Maps');assert.equal(sourceLabel('https://maps.app.goo.gl/abc'),'Google Maps');assert.equal(sourceLabel('https://apteka.mn/mn/stores'),'apteka.mn');assert.equal(sourceLabel('https://www.barilgiin-material.mn/'),'barilgiin-material.mn');assert.equal(sourceLabel('https://pharmacy.monos.mn/branches'),'pharmacy.monos.mn');assert.equal(sourceLabel('Field visit 2026-09-17'),'Field visit 2026-09-17');assert.equal(safeUrl('javascript:alert(1)'),false);assert.equal(safeUrl('tel:+97699119911'),false);});
+test('A business nobody travels to is found in every district, and is not marked down for having no map pin',()=>{
+ const p=[{id:'shop',name:'А нягтлан',category:'accountant',district:'СБД',address:'',phones:['99000001'],latitude:47,longitude:106,qualityFlags:[]},{id:'online',name:'Я нягтлан',category:'accountant',district:'СБД',address:'',phones:['99000002'],latitude:null,longitude:null,qualityFlags:['online_service']}] as unknown as Place[];
+ // Its own district says nothing about who it can serve, so no district search leaves it out.
+ assert.deepEqual(findPlaces(p,{category:'accountant',district:'ХУД'}).map(x=>x.id),['online']);
+ assert.deepEqual(findPlaces(p,{category:'accountant',district:'СБД'}).map(x=>x.id).sort(),['online','shop']);
+ assert.ok(servesDistrict({district:'СБД',qualityFlags:['online_service']},'Багануур'));
+ assert.ok(!servesDistrict({district:'СБД',serviceAreas:[]},'Багануур'));
+ // Neither has a pin, and the online one is named last, so only the exemption can put it first.
+ const noPins=[{id:'a_shop',name:'А нягтлан',category:'accountant',address:'',phones:['99000001'],latitude:null,longitude:null,qualityFlags:[]},{id:'z_online',name:'Я нягтлан',category:'accountant',address:'',phones:['99000002'],latitude:null,longitude:null,qualityFlags:['online_service']}] as unknown as Place[];
+ assert.deepEqual(findPlaces(noPins,{category:'accountant'}).map(x=>x.id),['z_online','a_shop']);
+});
+
 test('AC 4.5: "БЗД эмийн сан" finds only pharmacies in БЗД, and every catalog source has a label',()=>{const rows=JSON.parse(fs.readFileSync(new URL('../data/directory.json',import.meta.url),'utf8')) as Place[];const intent=interpretLocal('БЗД эмийн сан');assert.equal(intent.action,'search');const found=findPlaces(rows,{category:intent.category,district:intent.district});assert.ok(found.length>0);for(const p of found){assert.ok(inCategory(p,'pharmacy'),p.name);assert.equal(p.district,'БЗД');}for(const r of rows){assert.ok(sourceLabel(r.sources[0]).length>0,r.id);assert.ok(safeUrl(r.sources[0]),r.id);}});
 test('AC 5.2: verifiedAt only with checkStatus Баталгаажсан and a real date not after the build; closed and wrong-number records are absent',()=>{const rows=JSON.parse(fs.readFileSync(new URL('../data/directory.json',import.meta.url),'utf8')) as Place[];assert.equal(new Set(rows.map(r=>r.id)).size,rows.length);
  // The build happened no later than the summary export, and never later than this test run.

@@ -6,8 +6,9 @@
 // checkStatus stays "Шалгаагүй": an owner saying their own hours is not a check. Only an edit carrying phoneVerifiedAt
 // (the date Nomi reached the business by phone) marks it "Баталгаажсан", the same rule the field tool's import follows.
 //
-// serviceStyle is the owner's own answer to how the service works, which beats the category's guess: "callout" and "both"
-// set the mobile_service flag the card reads, "visit" clears it.
+// serviceStyle is the owner's own answer to how the service works, which beats the category's guess. It sets the two flags the
+// card reads and nothing else: "callout" and "both" set mobile_service, "online" sets online_service (and drops the districts,
+// since nobody travels), "visit" clears both.
 //
 //   node scripts/apply-owner-edits.mjs [--edits data/owner-edits.json] [--catalog src/data/directory.json] [--check]
 import {readFile, writeFile} from 'node:fs/promises';
@@ -49,6 +50,7 @@ const unmatched = [];
 let newBusinesses = 0;
 let verified = 0;
 let comesToYou = 0;
+let online = 0;
 for (const edit of edits.edits) {
   if (!edit?.placeId) {
     newBusinesses++;
@@ -66,8 +68,15 @@ for (const edit of edits.edits) {
   const areas = (Array.isArray(edit.serviceAreas) ? edit.serviceAreas : []).filter((d) => districts.has(d));
   if (areas.length) record.serviceAreas = [...new Set(areas)];
   record.qualityFlags = [...new Set([...(record.qualityFlags ?? []), 'owner_corrected'])];
-  if (edit.serviceStyle === 'callout' || edit.serviceStyle === 'both') record.qualityFlags = [...new Set([...record.qualityFlags, 'mobile_service'])];
-  else if (edit.serviceStyle === 'visit') record.qualityFlags = record.qualityFlags.filter((flag) => flag !== 'mobile_service');
+  if (edit.serviceStyle) {
+    const goesOut = edit.serviceStyle === 'callout' || edit.serviceStyle === 'both';
+    const isOnline = edit.serviceStyle === 'online';
+    record.qualityFlags = record.qualityFlags.filter((flag) => flag !== 'mobile_service' && flag !== 'online_service');
+    if (goesOut) record.qualityFlags.push('mobile_service');
+    if (isOnline) record.qualityFlags.push('online_service');
+    // Nobody travels to an online business, so a district it was listed under before says nothing true about it.
+    if (isOnline) delete record.serviceAreas;
+  }
   if (isDate(edit.phoneVerifiedAt)) {
     record.checkStatus = 'Баталгаажсан';
     record.verifiedAt = edit.phoneVerifiedAt;
@@ -75,6 +84,7 @@ for (const edit of edits.edits) {
     verified++;
   }
   if (edit.serviceStyle === 'callout' || edit.serviceStyle === 'both') comesToYou++;
+  if (edit.serviceStyle === 'online') online++;
   applied.push(edit.placeId);
 }
 
@@ -89,6 +99,7 @@ console.log(
       edits: edits.edits.length,
       applied: [...new Set(applied)].length,
       comesToYou: comesToYou,
+      online: online,
       phoneVerified: verified,
       newBusinesses,
       unmatched: [...new Set(unmatched)].sort(),

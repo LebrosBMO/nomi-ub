@@ -8,7 +8,7 @@ import { Colors } from '@/constants/theme';
 import { useNomi } from '@/hooks/use-nomi';
 import { mapsLink, safeUrl, verificationLabel } from '@/utils/core';
 import { recordPlaceEvent } from '@/utils/events';
-import { COMES_TO_YOU, DISTANCE_UNKNOWN, formatDistance, MOBILE_SERVICE, travelLine } from '@/utils/location';
+import { COMES_TO_YOU, DISTANCE_UNKNOWN, formatDistance, MOBILE_SERVICE, ONLINE_SERVICE, travelLine, WORKS_ONLINE } from '@/utils/location';
 import { NOMI_WEB_URL } from '@/utils/hosted';
 import { placeById } from '@/utils/places';
 import { REPORTED_LABEL, reportedPlaces } from '@/utils/reports';
@@ -22,6 +22,8 @@ const addressLine = (p: { address: string; latitude: number | null; district: st
   p.address && p.address !== NO_ADDRESS ? p.address : p.latitude != null ? 'Байршил газрын зураг дээр' + (p.district ? ' · ' + p.district : '') : 'Хаягийг утсаар лавлана уу.';
 /** A record may list several numbers; the card shows at most this many. */
 const MAX_PHONES = 3;
+/** For a business nobody travels to, the line that replaces the address: it is reached from anywhere, so no district is named. */
+const ONLINE_LINE = 'Хаана ч байсан утсаар, онлайнаар холбогдоно.';
 /** For a business that comes to the customer, where it comes instead of where it is: the districts it named, else a request to ask. */
 const servesLine = (p: { serviceAreas?: string[]; district: string | null }) =>
   p.serviceAreas?.length ? 'Очдог дүүрэг: ' + p.serviceAreas.join(', ') : 'Аль дүүрэгт очдогийг утсаар асуугаарай' + (p.district ? ' · ' + p.district + '-д байрладаг' : '');
@@ -49,8 +51,12 @@ export function PlaceCard({ id, index, animate, distance, oncall }: Props) {
   const phones = place.phones.slice(0, MAX_PHONES);
   const verified = Boolean(place.verifiedAt);
   const mobile = place.qualityFlags.includes(MOBILE_SERVICE);
+  // A business nobody travels to (the owner answered "online"): it has no address to show, no district to serve and no map.
+  const online = place.qualityFlags.includes(ONLINE_SERVICE);
   // A business that comes to the customer: its address and distance do not matter, the call does.
-  const comes = oncall || mobile;
+  const comes = !online && (oncall || mobile);
+  // Either way the one thing to do is call, so the big button and the hidden map are shared.
+  const callFirst = comes || online;
   const [firstPhone, ...otherPhones] = phones;
   const call = (phone: string) => open('tel:+976' + phone.replace(/\D/g, '').replace(/^976(?=\d{8}$)/, ''), 'call');
   // A "Мэдээлэл буруу" report, or a Хаагдсан / Утас буруу answer to the follow-up after a call.
@@ -93,8 +99,13 @@ export function PlaceCard({ id, index, animate, distance, oncall }: Props) {
           <Text style={[styles.badgeText, verified ? styles.badgeTextVerified : styles.badgeTextUnverified]}>{verificationLabel(place)}</Text>
         </View>
       </View>
-      <Text style={styles.address}>{comes ? servesLine(place) : addressLine(place)}</Text>
-      {comes ? (
+      <Text style={styles.address}>{online ? ONLINE_LINE : comes ? servesLine(place) : addressLine(place)}</Text>
+      {online ? (
+        <View style={styles.distanceRow}>
+          <Ionicons name="globe-outline" size={14} color={Colors.primary} />
+          <Text style={styles.distance}>{WORKS_ONLINE}</Text>
+        </View>
+      ) : comes ? (
         <View style={styles.distanceRow}>
           <Ionicons name="car-outline" size={14} color={Colors.primary} />
           <Text style={styles.distance}>{COMES_TO_YOU}</Text>
@@ -118,21 +129,21 @@ export function PlaceCard({ id, index, animate, distance, oncall }: Props) {
           {place.hoursClaim}
         </Text>
       )}
-      {comes && firstPhone && (
-        // The one thing to do with a business that comes to you: call it.
+      {callFirst && firstPhone && (
+        // The one thing to do with a business that comes to you, or that you never meet: call it.
         <Pressable accessibilityRole="button" accessibilityLabel={place.name + ' руу залгах: ' + firstPhone} onPress={() => call(firstPhone)} style={styles.callButton}>
           <Ionicons name="call" size={17} color={Colors.surface} />
           <Text style={styles.callText}>Залгах {firstPhone}</Text>
         </Pressable>
       )}
       <View style={styles.actions}>
-        {(comes ? otherPhones : phones).map((phone) => (
+        {(callFirst ? otherPhones : phones).map((phone) => (
           <Pressable key={phone} accessibilityRole="button" accessibilityLabel={place.name + ' руу залгах: ' + phone} onPress={() => call(phone)} style={styles.action}>
             <Ionicons name="call-outline" size={16} color={Colors.primary} />
             <Text style={styles.link}>{phone}</Text>
           </Pressable>
         ))}
-        {map && !comes && (
+        {map && !callFirst && (
           <Pressable accessibilityRole="button" accessibilityLabel={place.name + ' газрын зураг'} onPress={() => open(map, 'map')} style={styles.action}>
             <Ionicons name="location-outline" size={16} color={Colors.primary} />
             <Text style={styles.link}>Газрын зураг</Text>

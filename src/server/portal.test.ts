@@ -92,6 +92,13 @@ test('A claim is stored pending with an id and a time, and the owner checkbox, t
   assert.ok(Number.isFinite(Date.parse(stored?.createdAt ?? '')));
   assert.deepEqual((await store.listClaims({ kind: 'claim', limit: 10 })).map((c) => c.id), [first.body.id]);
 
+  // "Nobody travels to me": stored as the owner's own answer, and the districts it came with are dropped on the way in.
+  const online = await sent(claimBody({ serviceStyle: 'online', serviceAreas: ['БЗД', 'ЧД'] }));
+  assert.equal(online.status, 200);
+  const remote = await store.getClaim(online.body.id);
+  assert.equal(remote?.serviceStyle, 'online');
+  assert.deepEqual(remote?.serviceAreas, []);
+
   const refused = async (body: unknown, route: 'claim' | 'partner' = 'claim') => {
     const answer = await sent(body, route);
     return [answer.status, answer.body.error];
